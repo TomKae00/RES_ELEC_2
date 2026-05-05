@@ -1,0 +1,3 @@
+scheme,in_sample_expected_profit,out_sample_expected_profit,generalization_gap
+one-price,1003745.5271424843,1003474.6693936468,270.85774883745034
+two-price,916960.7256221885,916750.0197802415,210.7058419469613

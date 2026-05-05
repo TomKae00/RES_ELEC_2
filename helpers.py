@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
 # --------------------------------
@@ -261,8 +260,8 @@ def build_combined_scenarios(
 def prepare_scenario_data(
     wind_scenario_file: str,
     price_file: str,
-    n_wind_scenarios: int = 30,
-    n_price_scenarios: int = 30,
+    n_wind_scenarios: int = 20,
+    n_price_scenarios: int = 20,
     n_imbalance_scenarios: int = 4,
     deficit_probability: float = 0.5,
     seed: int = 42,
@@ -364,17 +363,34 @@ def save_wind_scenarios_to_csv(
     df.index = [f"h{h:02d}" for h in range(24)]
     df.to_csv(filename)
 
+def subset_combined_scenarios(combined, selected_scenarios):
+    """
+    Creates a new CombinedScenarioSet from a subset of combined scenarios.
+    Equal probabilities are reassigned within the subset.
+    """
+    prob = 1.0 / len(selected_scenarios)
+    probability = {sc: prob for sc in selected_scenarios}
 
-def plot_profit_distribution(
-    profits: List[float],
-    filename: str,
-    title: str
-) -> None:
-    plt.figure(figsize=(8, 5))
-    plt.hist(profits, bins=30)
-    plt.title(title)
-    plt.xlabel("Profit [EUR]")
-    plt.ylabel("Frequency")
-    plt.tight_layout()
-    plt.savefig(filename, dpi=300)
-    plt.close()
+    return CombinedScenarioSet(
+        scenarios=list(selected_scenarios),
+        probability=probability
+    )
+
+
+def make_k_folds(scenarios, k: int = 8, seed: int = 42):
+    """
+    Splits scenarios into k folds while keeping each scenario as a tuple.
+    """
+    rng = np.random.default_rng(seed)
+
+    scenarios = list(scenarios)
+    rng.shuffle(scenarios)
+
+    folds = [[] for _ in range(k)]
+
+    for idx, sc in enumerate(scenarios):
+        folds[idx % k].append(sc)
+
+    return folds
+
+

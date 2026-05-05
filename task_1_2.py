@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import gurobipy as gp
 from gurobipy import GRB
 
@@ -12,104 +13,83 @@ from helpers import (
     ensure_output_folders,
     prepare_scenario_data,
     save_offer_to_csv,
-    plot_profit_distribution,
     save_wind_scenarios_to_csv,
+)
+
+from plotting import (
+    plot_hourly_offer,
+    plot_profit_distribution,
+    plot_profit_by_scenario,
+    plot_offer_comparison
 )
 
 
 def solve_two_price_offering_problem(data, combined):
     """
-    Task 1.2:
-    Offering strategy under the two-price balancing scheme.
-
-    Two-price settlement:
-    - beneficial deviation -> settles at DA price
-    - harmful deviation    -> settles at balancing price
+    Linear two-price stochastic offering model.
+    No binary variables needed.
     """
 
-    model = gp.Model("task_1_2_two_price")
+    model = gp.Model("task_1_2_two_price_linear")
     model.setParam("OutputFlag", 1)
-    model.setParam("DualReductions", 0)  # helps distinguish infeasible/unbounded
 
-    # First-stage decision variables
+    # First-stage DA offer
     offer = model.addVars(HOURS, lb=0.0, ub=CAPACITY_MW, name="offer")
 
-    # Second-stage variables
-    delta_pos = {}
-    delta_neg = {}
-    z = {}   # binary to enforce only one deviation side is active
-
-    M = CAPACITY_MW  # because wind and offer are both in [0,500], deviation is in [-500,500]
+    # Scenario-dependent deviations
+    delta_up = {}
+    delta_down = {}
 
     for sc in combined.scenarios:
         for t in HOURS:
-            delta_pos[(sc, t)] = model.addVar(lb=0.0, ub=M, name=f"delta_pos_{sc}_{t}")
-            delta_neg[(sc, t)] = model.addVar(lb=0.0, ub=M, name=f"delta_neg_{sc}_{t}")
-            z[(sc, t)] = model.addVar(vtype=GRB.BINARY, name=f"z_{sc}_{t}")
+            delta_up[(sc, t)] = model.addVar(lb=0.0, ub=CAPACITY_MW, name=f"delta_up_{sc}_{t}")
+            delta_down[(sc, t)] = model.addVar(lb=0.0, ub=CAPACITY_MW, name=f"delta_down_{sc}_{t}")
 
     model.update()
 
-    # Deviation split constraints
+    # delta = wind - offer = delta_up - delta_down
     for (w_s, p_s, i_s) in combined.scenarios:
         wind = data.wind[w_s]
+        sc = (w_s, p_s, i_s)
 
         for t in HOURS:
-            sc = (w_s, p_s, i_s)
-
-            # wind - offer = positive deviation - negative deviation
             model.addConstr(
-                delta_pos[(sc, t)] - delta_neg[(sc, t)] == wind[t] - offer[t],
+                delta_up[(sc, t)] - delta_down[(sc, t)] == wind[t] - offer[t],
                 name=f"deviation_balance_{w_s}_{p_s}_{i_s}_{t}"
             )
 
-            # Only one of delta_pos and delta_neg can be positive
-            model.addConstr(
-                delta_pos[(sc, t)] <= M * z[(sc, t)],
-                name=f"pos_activation_{w_s}_{p_s}_{i_s}_{t}"
-            )
-            model.addConstr(
-                delta_neg[(sc, t)] <= M * (1 - z[(sc, t)]),
-                name=f"neg_activation_{w_s}_{p_s}_{i_s}_{t}"
-            )
-
-    # Objective
     obj = gp.LinExpr()
 
     for (w_s, p_s, i_s) in combined.scenarios:
         prob = combined.probability[(w_s, p_s, i_s)]
-
         da = data.price[p_s]
-        bp = data.balancing_price[(p_s, i_s)]
         si = data.imbalance[i_s]
+        sc = (w_s, p_s, i_s)
 
         for t in HOURS:
-            sc = (w_s, p_s, i_s)
-            dp = delta_pos[(sc, t)]
-            dn = delta_neg[(sc, t)]
+            up = delta_up[(sc, t)]
+            down = delta_down[(sc, t)]
 
-            # Day-ahead revenue
+            # DA revenue
             obj += prob * da[t] * offer[t]
 
             if si[t] == 1:
-                # system deficit:
-                # positive deviation helpful -> DA
-                # negative deviation harmful -> BP
-                obj += prob * (da[t] * dp - bp[t] * dn)
+                # System deficit:
+                # upward deviation desired -> DA price
+                # downward deviation undesired -> 1.25 * DA
+                obj += prob * (da[t] * up - 1.25 * da[t] * down)
+
             else:
-                # system surplus:
-                # negative deviation helpful -> DA
-                # positive deviation harmful -> BP
-                obj += prob * (bp[t] * dp - da[t] * dn)
+                # System surplus:
+                # upward deviation undesired -> 0.85 * DA
+                # downward deviation desired -> DA price
+                obj += prob * (0.85 * da[t] * up - da[t] * down)
 
     model.setObjective(obj, GRB.MAXIMIZE)
     model.optimize()
 
-    if model.Status == GRB.UNBOUNDED:
-        raise RuntimeError("Model is unbounded.")
-    elif model.Status == GRB.INFEASIBLE:
-        raise RuntimeError("Model is infeasible.")
-    elif model.Status != GRB.OPTIMAL:
-        raise RuntimeError(f"Optimization ended with status {model.Status}.")
+    if model.Status != GRB.OPTIMAL:
+        raise RuntimeError(f"Optimization ended with status {model.Status}")
 
     offer_solution = np.array([offer[t].X for t in HOURS])
     expected_profit = model.ObjVal
@@ -175,8 +155,8 @@ def main():
     data, combined = prepare_scenario_data(
         wind_scenario_file=wind_file,
         price_file=price_file,
-        n_wind_scenarios=30,
-        n_price_scenarios=30,
+        n_wind_scenarios=20,
+        n_price_scenarios=20,
         n_imbalance_scenarios=4,
         deficit_probability=0.5,
         seed=42,
@@ -200,11 +180,34 @@ def main():
 
     save_offer_to_csv(offer, "outputs/tables/task_1_2_offer.csv")
     save_wind_scenarios_to_csv(data.wind, "data/processed/wind_scenarios_used.csv")
-    plot_profit_distribution(
-        profits=profits,
-        filename="outputs/figures/task_1_2_profit_distribution.png",
-        title="Task 1.2 Profit Distribution - Two-Price Scheme"
+    
+    plot_hourly_offer(
+    offer=offer,
+    filename="outputs/figures/task_1_2_hourly_offer.png",
+    title="Task 1.2 Optimal Hourly Offer - Two-Price Scheme"
     )
+
+    plot_profit_distribution(
+    profits=profits,
+    filename="outputs/figures/task_1_2_profit_distribution.png",
+    title="Task 1.2 Profit Distribution - Two-Price Scheme"
+    )
+
+    plot_profit_by_scenario(
+    profits=profits,
+    filename="outputs/figures/task_1_2_profit_by_scenario.png",
+    title="Task 1.2 Profit Across Scenarios - Two-Price Scheme"
+    )
+
+    one_price_df = pd.read_csv("outputs/tables/task_1_1_offer.csv")
+    offer_one = one_price_df["offer_MW"].to_numpy()
+    plot_offer_comparison(
+        offer_one_price=offer_one,
+        offer_two_price=offer,   # current solution
+        filename="outputs/figures/task_1_1_vs_1_2_offer_comparison.png",
+        title="Optimal Hourly Offers: One-Price vs Two-Price"
+    )
+
 
     print("\nFiles saved:")
     print(" - outputs/tables/task_1_2_offer.csv")

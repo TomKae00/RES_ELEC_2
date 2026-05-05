@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from matplotlib.pyplot import plot
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
@@ -14,7 +15,12 @@ from helpers import (
     evaluate_one_price_across_scenarios,
     save_offer_to_csv,
     save_wind_scenarios_to_csv,
+)
+
+from plotting import (
+    plot_hourly_offer,
     plot_profit_distribution,
+    plot_profit_by_scenario,
 )
 
 
@@ -72,8 +78,8 @@ def main():
     data, combined = prepare_scenario_data(
         wind_scenario_file=wind_file,
         price_file=price_file,
-        n_wind_scenarios=30,
-        n_price_scenarios=30,
+        n_wind_scenarios=20,
+        n_price_scenarios=20,
         n_imbalance_scenarios=4,
         deficit_probability=0.5,
         seed=42,
@@ -97,10 +103,23 @@ def main():
 
     save_offer_to_csv(offer, "outputs/tables/task_1_1_offer.csv")
     save_wind_scenarios_to_csv(data.wind, "data/processed/wind_scenarios_used.csv")
+    
+    plot_hourly_offer(
+    offer=offer,
+    filename="outputs/figures/task_1_1_hourly_offer.png",
+    title="Task 1.1 Optimal Hourly Offer - One-Price Scheme"
+    )
+
     plot_profit_distribution(
-        profits=profits,
-        filename="outputs/figures/task_1_1_profit_distribution.png",
-        title="Task 1.1 Profit Distribution - One-Price Scheme"
+    profits=profits,
+    filename="outputs/figures/task_1_1_profit_distribution.png",
+    title="Task 1.1 Profit Distribution - One-Price Scheme"
+    )
+
+    plot_profit_by_scenario(
+    profits=profits,
+    filename="outputs/figures/task_1_1_profit_by_scenario.png",
+    title="Task 1.1 Profit Across Scenarios - One-Price Scheme"
     )
 
     print("\nFiles saved:")
