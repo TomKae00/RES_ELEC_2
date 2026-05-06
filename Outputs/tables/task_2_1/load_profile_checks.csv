@@ -1,0 +1,2 @@
+minimum_load_observed,maximum_load_observed,maximum_ramp_observed,satisfies_min_load,satisfies_max_load,satisfies_ramp_limit
+220.0,600.0,34.99907820106546,True,True,True

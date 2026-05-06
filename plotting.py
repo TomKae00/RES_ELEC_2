@@ -230,5 +230,194 @@ def plot_risk_profit_distributions(
     plt.savefig(filename, dpi=300)
     plt.close()
 
+# ============================================================
+# Task 2.1
+# Plot load profiles
+# ============================================================
+def plot_load_profiles(load_profiles, filename, title):
+    import numpy as np
+    import matplotlib.pyplot as plt
 
+    minutes = np.arange(load_profiles.shape[1])
+
+    plt.figure(figsize=(10, 6))
+
+    for profile in load_profiles:
+        plt.plot(minutes, profile, linewidth=0.8, alpha=0.45)
+
+    plt.title(title)
+    plt.xlabel("Minute")
+    plt.ylabel("Load consumption [kW]")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+
+
+# ============================================================
+# Task 2.1
+# Reserve availability envelope
+# ============================================================
+def plot_reserve_availability_envelope(reserve_availability, filename, title):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    minutes = np.arange(reserve_availability.shape[1])
+
+    mean = np.mean(reserve_availability, axis=0)
+    p05 = np.quantile(reserve_availability, 0.05, axis=0)
+    p10 = np.quantile(reserve_availability, 0.10, axis=0)
+    p50 = np.quantile(reserve_availability, 0.50, axis=0)
+    p90 = np.quantile(reserve_availability, 0.90, axis=0)
+    p95 = np.quantile(reserve_availability, 0.95, axis=0)
+
+    plt.figure(figsize=(10, 6))
+
+    plt.fill_between(minutes, p05, p95, alpha=0.20, label="5th-95th percentile")
+    plt.fill_between(minutes, p10, p90, alpha=0.30, label="10th-90th percentile")
+    plt.plot(minutes, mean, linewidth=2.0, label="Mean")
+    plt.plot(minutes, p50, linestyle="--", linewidth=2.0, label="Median")
+
+    plt.title(title)
+    plt.xlabel("Minute")
+    plt.ylabel("Available FCR-D UP reserve [kW]")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+
+
+# ============================================================
+# Task 2.1
+# Reserve bid comparison
+# ============================================================
+def plot_task_2_1_bid_comparison(results_df, filename):
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(7, 5))
+
+    plt.bar(
+        results_df["method"],
+        results_df["reserve_bid_kw"],
+        edgecolor="black",
+    )
+
+    plt.title("Task 2.1 Optimal FCR-D UP Reserve Bid")
+    plt.xlabel("Method")
+    plt.ylabel("Reserve bid [kW]")
+    plt.grid(True, axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+
+
+# ============================================================
+# Task 2.1
+# Shortfall distribution
+# ============================================================
+def plot_shortfall_distribution(shortfalls, filename, title):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    shortfalls = np.asarray(shortfalls).flatten()
+
+    plt.figure(figsize=(8, 5))
+    plt.hist(shortfalls, bins=35, edgecolor="black", alpha=0.8)
+
+    plt.axvline(
+        np.mean(shortfalls),
+        linestyle="--",
+        linewidth=1.5,
+        label=f"Mean shortfall: {np.mean(shortfalls):.2f} kW",
+    )
+
+    plt.title(title)
+    plt.xlabel("Reserve shortfall [kW]")
+    plt.ylabel("Frequency")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+
+# ============================================================
+# Task 2.2
+# Out-of-sample P90 verification
+# ============================================================
+def plot_task_2_2_out_sample_satisfaction(results_df, filename):
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(7, 5))
+
+    plt.bar(
+        results_df["method"],
+        results_df["satisfaction_rate"],
+        edgecolor="black",
+    )
+
+    plt.axhline(
+        0.90,
+        linestyle="--",
+        linewidth=1.5,
+        label="P90 requirement",
+    )
+
+    plt.title("Task 2.2 Out-of-Sample P90 Verification")
+    plt.xlabel("Method")
+    plt.ylabel("Satisfaction rate")
+    plt.ylim(0, 1.05)
+    plt.grid(True, axis="y", alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+
+
+# ============================================================
+# Task 2.3
+# Reliability threshold vs reserve bid
+# ============================================================
+def plot_task_2_3_threshold_vs_bid(results_df, filename):
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(8, 5))
+
+    plt.plot(
+        results_df["reliability_threshold"],
+        results_df["reserve_bid_kw"],
+        marker="o",
+    )
+
+    plt.title("Task 2.3 Reliability Requirement versus Reserve Bid")
+    plt.xlabel("Reliability threshold")
+    plt.ylabel("Optimal reserve bid [kW]")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+
+
+# ============================================================
+# Task 2.3
+# Reliability threshold vs out-of-sample shortfall
+# ============================================================
+def plot_task_2_3_threshold_vs_shortfall(results_df, filename):
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(8, 5))
+
+    plt.plot(
+        results_df["reliability_threshold"],
+        results_df["out_sample_expected_shortfall_kw"],
+        marker="o",
+    )
+
+    plt.title("Task 2.3 Reliability Requirement versus Expected Shortfall")
+    plt.xlabel("Reliability threshold")
+    plt.ylabel("Out-of-sample expected shortfall [kW]")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
     
