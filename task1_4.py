@@ -12,11 +12,11 @@ from helpers import (
     CAPACITY_MW,
     ensure_output_folders,
     prepare_scenario_data,
+    scenario_profit_one_price,
 )
 
 from task_1_1 import (
     solve_one_price_offering_problem,
-    scenario_profit_one_price,
 )
 
 from task_1_2 import (
