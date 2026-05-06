@@ -13,6 +13,7 @@ from helpers import (
     CAPACITY_MW,
     ensure_output_folders,
     prepare_scenario_data,
+    prepare_volatile_test_scenario_data,
     evaluate_one_price_across_scenarios,
 )
 
@@ -21,7 +22,7 @@ from task_1_2 import evaluate_two_price_across_scenarios
 from plotting import (
     plot_hourly_offer,
     plot_profit_distribution,
-    plot_profit_vs_cvar,
+    plot_profit_vs_cvar_single_scheme,
 )
 
 
@@ -124,9 +125,9 @@ def solve_risk_averse_one_price(data, combined, alpha=0.90, beta=0.0):
     )
 
     model.setObjective(
-        expected_profit + beta * cvar,
-        GRB.MAXIMIZE,
-    )
+    (1.0 - beta) * expected_profit + beta * cvar,
+    GRB.MAXIMIZE,
+)
 
     model.optimize()
 
@@ -235,9 +236,9 @@ def solve_risk_averse_two_price(data, combined, alpha=0.90, beta=0.0):
     )
 
     model.setObjective(
-        expected_profit + beta * cvar,
-        GRB.MAXIMIZE,
-    )
+    (1.0 - beta) * expected_profit + beta * cvar,
+    GRB.MAXIMIZE,
+)
 
     model.optimize()
 
@@ -359,10 +360,18 @@ def run_beta_grid(data, combined, beta_values, alpha=0.90):
 # Figures
 # ============================================================
 def save_selected_plots(results_df, offers_df, profits_df):
-    plot_profit_vs_cvar(
+    plot_profit_vs_cvar_single_scheme(
         results_df=results_df,
-        filename=os.path.join(FIG_DIR, "expected_profit_vs_cvar.png"),
-        title="Task 1.4 Expected Profit versus CVaR",
+        scheme="one-price",
+        filename=os.path.join(FIG_DIR, "expected_profit_vs_cvar_one_price.png"),
+        title="Task 1.4 Expected Profit versus CVaR - One-Price Scheme",
+    )
+
+    plot_profit_vs_cvar_single_scheme(
+        results_df=results_df,
+        scheme="two-price",
+        filename=os.path.join(FIG_DIR, "expected_profit_vs_cvar_two_price.png"),
+        title="Task 1.4 Expected Profit versus CVaR - Two-Price Scheme",
     )
 
     for scheme in ["one-price", "two-price"]:
@@ -414,30 +423,37 @@ def main():
     alpha = 0.90
 
     beta_values = np.array([
-        0.00,
-        0.01,
-        0.05,
-        0.10,
-        0.50,
-        1.00,
-        2.00,
-        5.00,
-        10.00,
-        25.00,
-        50.00,
-        100.00,
-    ])
+    0.00,
+    0.05,
+    0.10,
+    0.20,
+    0.30,
+    0.40,
+    0.50,
+    0.60,
+    0.70,
+    0.80,
+    0.90,
+    1.00,
+])
 
     data, combined = prepare_scenario_data(
-        wind_scenario_file="Data/scen_zone2.csv",
-        price_file="Data/DayAheadPrices.csv",
-        n_wind_scenarios=20,
-        n_price_scenarios=20,
-        n_imbalance_scenarios=4,
-        deficit_probability=0.5,
-        seed=42,
-        price_area="DK2",
-    )
+         wind_scenario_file="Data/scen_zone2.csv",
+         price_file="Data/DayAheadPrices.csv",
+         n_wind_scenarios=20,
+         n_price_scenarios=20,
+         n_imbalance_scenarios=4,
+         deficit_probability=0.5,
+         seed=42,
+         price_area="DK2",
+     )
+    #data, combined = prepare_volatile_test_scenario_data(
+     #   n_wind_scenarios=30,
+      #  n_price_scenarios=30,
+      #  n_imbalance_scenarios=8,
+       # deficit_probability=0.5,
+       # seed=42,
+    #)
 
     print(f"Total combined scenarios: {len(combined.scenarios)}")
 
@@ -471,7 +487,8 @@ def main():
     print(f" - {TAB_DIR}/cvar_scenario_profits.csv")
 
     print("\nSaved figures:")
-    print(f" - {FIG_DIR}/expected_profit_vs_cvar.png")
+    print(f" - {FIG_DIR}/expected_profit_vs_cvar_one_price.png")
+    print(f" - {FIG_DIR}/expected_profit_vs_cvar_two_price.png")
     print(f" - {FIG_DIR}/offer_<scheme>_beta_<beta>.png")
     print(f" - {FIG_DIR}/profit_distribution_<scheme>_beta_<beta>.png")
 

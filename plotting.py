@@ -147,61 +147,58 @@ def plot_offer_comparison(
 # Task 1.4
 # Plot expected profit versus CVaR for different beta values
 # ============================================================
-def plot_profit_vs_cvar(results_df, filename=None, title=None):
+def plot_profit_vs_cvar_single_scheme(results_df, scheme, filename, title=None):
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    df = results_df[results_df["scheme"] == scheme].copy()
 
-    # Split by scheme
-    df_one = results_df[results_df["scheme"] == "one-price"]
-    df_two = results_df[results_df["scheme"] == "two-price"]
+    if df.empty:
+        raise ValueError(f"No results found for scheme = {scheme}")
 
-    # Sort by beta
-    df_one = df_one.sort_values("beta")
-    df_two = df_two.sort_values("beta")
+    df = df.sort_values("beta")
 
-    # Plot
-    ax.plot(df_one["cvar_profit"], df_one["expected_profit"], '-o', label="One-price")
-    ax.plot(df_two["cvar_profit"], df_two["expected_profit"], '-s', label="Two-price")
+    fig, ax = plt.subplots(figsize=(8, 5))
 
-    # Scatter for visibility
-    ax.scatter(df_one["cvar_profit"], df_one["expected_profit"])
-    ax.scatter(df_two["cvar_profit"], df_two["expected_profit"])
+    ax.plot(
+        df["cvar_profit"],
+        df["expected_profit"],
+        "-o",
+        label=scheme,
+    )
 
-    # Annotate beta values
-    for _, row in df_one.iterrows():
-        ax.annotate(f"β={row['beta']:.2f}",
-                    (row["cvar_profit"], row["expected_profit"]),
-                    xytext=(5, 5),
-                    textcoords="offset points",
-                    fontsize=8)
+    ax.scatter(
+        df["cvar_profit"],
+        df["expected_profit"],
+    )
 
-    for _, row in df_two.iterrows():
-        ax.annotate(f"β={row['beta']:.2f}",
-                    (row["cvar_profit"], row["expected_profit"]),
-                    xytext=(5, -10),
-                    textcoords="offset points",
-                    fontsize=8)
+    for _, row in df.iterrows():
+        ax.annotate(
+            f"β={row['beta']:.2f}",
+            (row["cvar_profit"], row["expected_profit"]),
+            xytext=(5, 5),
+            textcoords="offset points",
+            fontsize=8,
+        )
 
-    # Labels
     ax.set_xlabel("CVaR [EUR]")
     ax.set_ylabel("Expected Profit [EUR]")
-    ax.set_title(title if title else "Expected Profit vs CVaR")
-
+    ax.set_title(title if title else f"Expected Profit vs CVaR - {scheme}")
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend()
 
-    # Tight zoom (important!)
-    all_cvar = list(df_one["cvar_profit"]) + list(df_two["cvar_profit"])
-    all_profit = list(df_one["expected_profit"]) + list(df_two["expected_profit"])
+    # Optional: tighter axis limits
+    x = df["cvar_profit"].to_numpy()
+    y = df["expected_profit"].to_numpy()
 
-    ax.set_xlim(min(all_cvar) * 0.98, max(all_cvar) * 1.02)
-    ax.set_ylim(min(all_profit) * 0.98, max(all_profit) * 1.02)
+    if len(x) > 1:
+        x_margin = max((x.max() - x.min()) * 0.08, 1.0)
+        y_margin = max((y.max() - y.min()) * 0.08, 1.0)
+        ax.set_xlim(x.min() - x_margin, x.max() + x_margin)
+        ax.set_ylim(y.min() - y_margin, y.max() + y_margin)
 
     plt.tight_layout()
-
-    if filename:
-        plt.savefig(filename, dpi=300)
+    plt.savefig(filename, dpi=300)
+    plt.close()
 
     
 
@@ -233,28 +230,5 @@ def plot_risk_profit_distributions(
     plt.savefig(filename, dpi=300)
     plt.close()
 
-def plot_profit_cdf_by_beta(
-    profits_by_beta: dict,
-    filename: str,
-    title: str
-) -> None:
-    import numpy as np
-    import matplotlib.pyplot as plt
 
-    plt.figure(figsize=(8, 5))
-
-    for beta, profits in profits_by_beta.items():
-        profits = np.sort(np.array(profits))
-        cdf = np.arange(1, len(profits) + 1) / len(profits)
-
-        plt.step(profits, cdf, where="post", label=f"$\\beta={beta}$")
-
-    plt.title(title)
-    plt.xlabel("Scenario profit [EUR]")
-    plt.ylabel("Cumulative probability")
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(filename, dpi=300)
-    plt.close()
     

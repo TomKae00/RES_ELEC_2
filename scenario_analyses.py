@@ -12,7 +12,7 @@ from helpers import (
     CAPACITY_MW,
     ensure_output_folders,
     prepare_scenario_data,
-)
+    prepare_volatile_test_scenario_data)
 
 
 # ============================================================
@@ -291,6 +291,55 @@ def summarize_combined_scenarios(combined_df):
 
     return summary
 
+def print_sample_combined_scenarios(data, combined, n_samples=10):
+    """
+    Prints examples of the combined scenarios that are sent to the optimization model.
+
+    Each combined scenario is a tuple:
+        (wind_scenario_id, price_scenario_id, imbalance_scenario_id)
+
+    The model receives, for each combined scenario:
+        - 24 hourly wind production values
+        - 24 hourly day-ahead prices
+        - 24 hourly imbalance states
+        - 24 hourly balancing prices
+        - one scenario probability
+    """
+
+    print("\n" + "=" * 90)
+    print("SAMPLE COMBINED SCENARIOS RECEIVED BY THE MODEL")
+    print("=" * 90)
+
+    scenarios_to_print = combined.scenarios[:n_samples]
+
+    for scenario_index, sc in enumerate(scenarios_to_print):
+        w_s, p_s, i_s = sc
+
+        wind = data.wind[w_s]
+        price = data.price[p_s]
+        imbalance = data.imbalance[i_s]
+        balancing_price = data.balancing_price[(p_s, i_s)]
+        probability = combined.probability[sc]
+
+        print(f"\nCombined scenario {scenario_index}")
+        print("-" * 90)
+        print(f"Scenario tuple:              {sc}")
+        print(f"Wind scenario ID:            {w_s}")
+        print(f"Price scenario ID:           {p_s}")
+        print(f"Imbalance scenario ID:       {i_s}")
+        print(f"Scenario probability:        {probability:.6f}")
+
+        scenario_table = pd.DataFrame({
+            "hour": HOURS,
+            "wind_MW": wind,
+            "day_ahead_price_EUR_per_MWh": price,
+            "system_imbalance": imbalance,
+            "balancing_price_EUR_per_MWh": balancing_price,
+        })
+
+        print(scenario_table.to_string(index=False))
+
+    print("\n" + "=" * 90)
 
 # ============================================================
 # Main script
@@ -308,15 +357,23 @@ def main():
     price_file = "Data/DayAheadPrices.csv"
 
     data, combined = prepare_scenario_data(
-        wind_scenario_file=wind_file,
-        price_file=price_file,
-        n_wind_scenarios=20,
-        n_price_scenarios=20,
-        n_imbalance_scenarios=4,
-        deficit_probability=0.5,
-        seed=42,
-        price_area="DK2",
-    )
+         wind_scenario_file="Data/scen_zone2.csv",
+         price_file="Data/DayAheadPrices.csv",
+         n_wind_scenarios=20,
+         n_price_scenarios=20,
+         n_imbalance_scenarios=4,
+         deficit_probability=0.5,
+         seed=42,
+         price_area="DK2",
+     )
+
+    #data, combined = prepare_volatile_test_scenario_data(
+    #    n_wind_scenarios=30,
+    #    n_price_scenarios=30,
+    #    n_imbalance_scenarios=8,
+    #    deficit_probability=0.5,
+    #    seed=42,
+    #)
 
     print("Scenario set created:")
     print(f"Wind scenarios: {len(data.wind)}")
@@ -564,6 +621,13 @@ def main():
 
     print("\nSaved figures in:")
     print(f" - {fig_dir}/")
+
+    print_sample_combined_scenarios(
+        data=data,
+        combined=combined,
+        n_samples=10,
+    )
+
 
 
 if __name__ == "__main__":
