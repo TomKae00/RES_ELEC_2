@@ -376,6 +376,77 @@ def plot_task_2_2_out_sample_satisfaction(results_df, filename):
 
 # ============================================================
 # Task 2.3
+# Combined dual-axis: reliability threshold vs reserve bid and expected shortfall
+# ============================================================
+def plot_task_2_3_tradeoff(results_df, filename):
+    dark_blue = "#1a3a6b"
+    light_blue = "#6baed6"
+    dark_red = "#AE2819"
+    light_red = "#e38664"
+
+    thresholds_pct = results_df["reliability_threshold"].to_numpy() * 100
+
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    ax1.set_xlabel("Reliability threshold [%]")
+    ax1.set_ylabel("Reserve bid [kW]", color=dark_blue)
+    ax1.tick_params(axis="y", labelcolor=dark_blue)
+
+    line1, = ax1.plot(
+        thresholds_pct,
+        results_df["reserve_bid_kw"],
+        color=dark_blue,
+        linestyle="-",
+        marker="o",
+        label="Reserve bid – in-sample",
+    )
+    line2, = ax1.plot(
+        thresholds_pct,
+        results_df["reserve_bid_kw"],
+        color=light_blue,
+        linestyle="--",
+        marker="o",
+        label="Reserve bid – out-of-sample",
+    )
+
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("Expected shortfall [kW]", color=dark_red)
+    ax2.tick_params(axis="y", labelcolor=dark_red)
+
+    line3, = ax2.plot(
+        thresholds_pct,
+        results_df["in_sample_expected_shortfall_kw"],
+        color=dark_red,
+        linestyle="-",
+        marker="s",
+        label="Expected shortfall – in-sample",
+    )
+    line4, = ax2.plot(
+        thresholds_pct,
+        results_df["out_sample_expected_shortfall_kw"],
+        color=light_red,
+        linestyle="--",
+        marker="s",
+        label="Expected shortfall – out-of-sample",
+    )
+
+    ax1.axvline(90, linestyle="--", color="grey", linewidth=1.2, alpha=0.7)
+
+    ax1.set_xticks([80, 85, 90, 95, 97.5, 99, 100])
+
+    lines = [line1, line2, line3, line4]
+    ax1.legend(lines, [l.get_label() for l in lines], loc="upper right")
+
+    ax1.set_title("Task 2.3 Reliability Threshold vs Reserve Bid and Expected Shortfall")
+    ax1.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+
+
+# ============================================================
+# Task 2.3
 # Reliability threshold vs reserve bid
 # ============================================================
 def plot_task_2_3_threshold_vs_bid(results_df, filename):

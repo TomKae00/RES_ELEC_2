@@ -22,6 +22,7 @@ from task2_1 import (
 from plotting import (
     plot_task_2_3_threshold_vs_bid,
     plot_task_2_3_threshold_vs_shortfall,
+    plot_task_2_3_tradeoff,
 )
 
 
@@ -168,6 +169,11 @@ def main():
         os.path.join(FIG_DIR, "threshold_vs_out_sample_expected_shortfall.png"),
     )
 
+    plot_task_2_3_tradeoff(
+        results_df,
+        os.path.join(FIG_DIR, "threshold_tradeoff_combined.png"),
+    )
+
     print("\nTask 2.3 results:")
     print(results_df)
 
@@ -177,6 +183,7 @@ def main():
     print("\nSaved figures:")
     print(f" - {FIG_DIR}/threshold_vs_reserve_bid.png")
     print(f" - {FIG_DIR}/threshold_vs_out_sample_expected_shortfall.png")
+    print(f" - {FIG_DIR}/threshold_tradeoff_combined.png")
 
 
 if __name__ == "__main__":
