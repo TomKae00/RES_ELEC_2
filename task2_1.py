@@ -121,15 +121,16 @@ def solve_also_x(
     n_samples = len(samples)
 
     max_violations = int(np.floor(epsilon * n_samples))
-   # big_m = MAX_LOAD_KW - MIN_LOAD_KW
-    big_m = 10000
+   
+    max_reserve = MAX_LOAD_KW - MIN_LOAD_KW
+    big_m = max_reserve
 
     model = gp.Model("task_2_1_also_x")
     model.setParam("OutputFlag", 0)
 
     c_up = model.addVar(
         lb=0.0,
-        ub=big_m,
+        ub=max_reserve,
         name="c_up",
     )
 
@@ -177,27 +178,26 @@ def solve_cvar_reserve_bid(
     epsilon: float = 0.10,
 ) -> dict:
     """
-    Conservative CVaR approximation of the P90 requirement.
+    CVaR approximation matching the Lecture 10 formulation.
 
-    Let:
-        F_i = available reserve in sample i
-        c_up = reserve bid
+    Model:
 
-    Define violation expression:
-        X_i = c_up - F_i
+        max c_up
 
-    The chance constraint is:
-        P(X_i <= 0) >= 1 - epsilon
+    subject to:
 
-    CVaR approximation:
-        CVaR_{1-epsilon}(X) <= 0
+        c_up - F_i <= zeta_i              for all i
 
-    Linear form:
-        z_i >= X_i - beta
-        z_i >= 0
-        beta + 1/epsilon * E[z_i] <= 0
+        (1/N) sum_i zeta_i <= (1-epsilon) * beta
 
-    This is more conservative than ALSO-X.
+        beta <= zeta_i                    for all i
+
+        c_up >= 0
+
+        beta <= 0
+
+    where:
+        F_i is available reserve in sample i.
     """
 
     samples = flatten_samples(reserve_availability)
@@ -205,37 +205,49 @@ def solve_cvar_reserve_bid(
 
     max_reserve = MAX_LOAD_KW - MIN_LOAD_KW
 
-    model = gp.Model("task_2_1_cvar")
+    model = gp.Model("task_2_1_cvar_lecture_formulation")
     model.setParam("OutputFlag", 0)
 
+    # Reserve bid
     c_up = model.addVar(
         lb=0.0,
         ub=max_reserve,
         name="c_up",
     )
 
+    # VaR-related auxiliary variable from the lecture formulation
     beta = model.addVar(
         lb=-GRB.INFINITY,
+        ub=0.0,
         name="beta",
     )
 
-    z = model.addVars(
+    # Auxiliary variables zeta_i
+    zeta = model.addVars(
         range(n_samples),
-        lb=0.0,
-        name="z",
+        lb=-GRB.INFINITY,
+        name="zeta",
     )
 
+    # c_up - F_i <= zeta_i
     for i in range(n_samples):
         model.addConstr(
-            z[i] >= c_up - samples[i] - beta,
-            name=f"excess_shortfall_{i}",
+            c_up - samples[i] <= zeta[i],
+            name=f"reserve_shortfall_bound_{i}",
         )
 
+    # beta <= zeta_i
+    for i in range(n_samples):
+        model.addConstr(
+            beta <= zeta[i],
+            name=f"beta_lower_bound_{i}",
+        )
+
+    # average zeta <= (1 - epsilon) * beta
     model.addConstr(
-        beta + (1.0 / epsilon) * (1.0 / n_samples) * gp.quicksum(
-            z[i] for i in range(n_samples)
-        ) <= 0.0,
-        name="cvar_constraint",
+        (1.0 / n_samples) * gp.quicksum(zeta[i] for i in range(n_samples))
+        <= (1.0 - epsilon) * beta,
+        name="cvar_approximation_constraint",
     )
 
     model.setObjective(c_up, GRB.MAXIMIZE)
@@ -254,7 +266,6 @@ def solve_cvar_reserve_bid(
         "beta_var": beta.X,
         "shortfalls": shortfalls,
     }
-
 
 # ============================================================
 # Main
