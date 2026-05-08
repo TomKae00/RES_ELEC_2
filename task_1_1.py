@@ -107,19 +107,19 @@ def main():
     plot_hourly_offer(
     offer=offer,
     filename="outputs/figures/task_1_1_hourly_offer.png",
-    title="Task 1.1 Optimal Hourly Offer - One-Price Scheme"
+    #title="Task 1.1 Optimal Hourly Offer - One-Price Scheme"
     )
 
     plot_profit_distribution(
     profits=profits,
     filename="outputs/figures/task_1_1_profit_distribution.png",
-    title="Task 1.1 Profit Distribution - One-Price Scheme"
+    #title="Task 1.1 Profit Distribution - One-Price Scheme"
     )
 
     plot_profit_by_scenario(
     profits=profits,
     filename="outputs/figures/task_1_1_profit_by_scenario.png",
-    title="Task 1.1 Profit Across Scenarios - One-Price Scheme"
+    #title="Task 1.1 Profit Across Scenarios - One-Price Scheme"
     )
 
     print("\nFiles saved:")

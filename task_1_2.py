@@ -184,28 +184,24 @@ def main():
     plot_hourly_offer(
     offer=offer,
     filename="outputs/figures/task_1_2_hourly_offer.png",
-    title="Task 1.2 Optimal Hourly Offer - Two-Price Scheme"
     )
 
     plot_profit_distribution(
     profits=profits,
     filename="outputs/figures/task_1_2_profit_distribution.png",
-    title="Task 1.2 Profit Distribution - Two-Price Scheme"
     )
 
     plot_profit_by_scenario(
     profits=profits,
     filename="outputs/figures/task_1_2_profit_by_scenario.png",
-    title="Task 1.2 Profit Across Scenarios - Two-Price Scheme"
     )
 
     one_price_df = pd.read_csv("outputs/tables/task_1_1_offer.csv")
     offer_one = one_price_df["offer_MW"].to_numpy()
     plot_offer_comparison(
         offer_one_price=offer_one,
-        offer_two_price=offer,   # current solution
+        offer_two_price=offer,
         filename="outputs/figures/task_1_1_vs_1_2_offer_comparison.png",
-        title="Optimal Hourly Offers: One-Price vs Two-Price"
     )
 
 

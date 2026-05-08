@@ -17,7 +17,7 @@ from helpers import CAPACITY_MW
 def plot_hourly_offer(
     offer: np.ndarray,
     filename: str,
-    title: str,
+    #title: str,
     capacity_mw: float = CAPACITY_MW
 ) -> None:
     hours = np.arange(24)
@@ -31,7 +31,7 @@ def plot_hourly_offer(
         label=f"Capacity: {capacity_mw:.0f} MW"
     )
 
-    plt.title(title)
+    #plt.title(title)
     plt.xlabel("Hour")
     plt.ylabel("Day-ahead offer [MW]")
     plt.xticks(hours)
@@ -50,7 +50,6 @@ def plot_hourly_offer(
 def plot_profit_distribution(
     profits: List[float],
     filename: str,
-    title: str
 ) -> None:
     expected_profit = np.mean(profits)
 
@@ -63,7 +62,6 @@ def plot_profit_distribution(
         label=f"Expected profit: {expected_profit:,.0f} EUR"
     )
 
-    plt.title(title)
     plt.xlabel("Scenario profit [EUR]")
     plt.ylabel("Frequency")
     plt.grid(True, alpha=0.3)
@@ -80,7 +78,6 @@ def plot_profit_distribution(
 def plot_profit_by_scenario(
     profits: List[float],
     filename: str,
-    title: str
 ) -> None:
     scenario_ids = np.arange(1, len(profits) + 1)
     expected_profit = np.mean(profits)
@@ -101,7 +98,6 @@ def plot_profit_by_scenario(
         label=f"Expected profit: {expected_profit:,.0f} EUR"
     )
 
-    plt.title(title)
     plt.xlabel("Scenario index")
     plt.ylabel("Profit [EUR]")
     plt.grid(True, alpha=0.3)
@@ -118,7 +114,6 @@ def plot_offer_comparison(
     offer_one_price: np.ndarray,
     offer_two_price: np.ndarray,
     filename: str,
-    title: str = "Comparison of Optimal Hourly Offers"
 ) -> None:
     hours = np.arange(24)
 
@@ -132,7 +127,6 @@ def plot_offer_comparison(
         label=f"Capacity: {CAPACITY_MW:.0f} MW"
     )
 
-    plt.title(title)
     plt.xlabel("Hour")
     plt.ylabel("Day-ahead offer [MW]")
     plt.xticks(hours)
@@ -437,7 +431,7 @@ def plot_task_2_3_tradeoff(results_df, filename):
     lines = [line1, line2, line3, line4]
     ax1.legend(lines, [l.get_label() for l in lines], loc="upper right")
 
-    ax1.set_title("Task 2.3 Reliability Threshold vs Reserve Bid and Expected Shortfall")
+    #ax1.set_title("Task 2.3 Reliability Threshold vs Reserve Bid and Expected Shortfall")
     ax1.grid(True, alpha=0.3)
 
     fig.tight_layout()
@@ -460,7 +454,7 @@ def plot_task_2_3_threshold_vs_bid(results_df, filename):
         marker="o",
     )
 
-    plt.title("Task 2.3 Reliability Requirement versus Reserve Bid")
+    #plt.title("Task 2.3 Reliability Requirement versus Reserve Bid")
     plt.xlabel("Reliability threshold")
     plt.ylabel("Optimal reserve bid [kW]")
     plt.grid(True, alpha=0.3)
