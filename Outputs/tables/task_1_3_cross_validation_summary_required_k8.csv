@@ -1,0 +1,3 @@
+k_folds,scheme,n_in_sample,n_out_sample,mean_in_sample_profit_eur,mean_out_sample_profit_eur,mean_generalization_gap_eur,std_out_sample_profit_across_folds_eur,mean_out_sample_std_profit_eur,mean_solve_time_s
+8,one-price,200,1400,1003703.9288620898,1003703.9288620898,0.0,1834.3646436509944,297557.73145396676,0.00027080212385044433
+8,two-price,200,1400,916910.5403419466,916788.2293604171,122.310981529532,1696.6757144505416,273147.2554367685,0.058444578126000124
