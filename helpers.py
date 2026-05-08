@@ -41,7 +41,11 @@ class CombinedScenarioSet:
 def ensure_output_folders() -> None:
     os.makedirs("outputs", exist_ok=True)
     os.makedirs("outputs/figures", exist_ok=True)
+    os.makedirs("outputs/figures/task_1_1", exist_ok=True)
+    os.makedirs("outputs/figures/task_1_2", exist_ok=True)
     os.makedirs("outputs/tables", exist_ok=True)
+    os.makedirs("outputs/tables/task_1_1", exist_ok=True)
+    os.makedirs("outputs/tables/task_1_2", exist_ok=True)
     os.makedirs("data", exist_ok=True)
     os.makedirs("data/processed", exist_ok=True)
 

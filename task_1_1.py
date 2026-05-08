@@ -101,30 +101,27 @@ def main():
 
     profits = evaluate_one_price_across_scenarios(offer, data, combined)
 
-    save_offer_to_csv(offer, "outputs/tables/task_1_1_offer.csv")
+    save_offer_to_csv(offer, "outputs/tables/task_1_1/task_1_1_offer.csv")
     save_wind_scenarios_to_csv(data.wind, "data/processed/wind_scenarios_used.csv")
     
     plot_hourly_offer(
     offer=offer,
-    filename="outputs/figures/task_1_1_hourly_offer.png",
-    #title="Task 1.1 Optimal Hourly Offer - One-Price Scheme"
+    filename="outputs/figures/task_1_1/task_1_1_hourly_offer.png",
     )
 
     plot_profit_distribution(
     profits=profits,
-    filename="outputs/figures/task_1_1_profit_distribution.png",
-    #title="Task 1.1 Profit Distribution - One-Price Scheme"
+    filename="outputs/figures/task_1_1/task_1_1_profit_distribution.png",
     )
 
     plot_profit_by_scenario(
     profits=profits,
-    filename="outputs/figures/task_1_1_profit_by_scenario.png",
-    #title="Task 1.1 Profit Across Scenarios - One-Price Scheme"
+    filename="outputs/figures/task_1_1/task_1_1_profit_by_scenario.png",
     )
 
     print("\nFiles saved:")
-    print(" - outputs/tables/task_1_1_offer.csv")
-    print(" - outputs/figures/task_1_1_profit_distribution.png")
+    print(" - outputs/tables/task_1_1/task_1_1_offer.csv")
+    print(" - outputs/figures/task_1_1/task_1_1_profit_distribution.png")
     print(" - data/processed/price_hourly_daily.csv")
     print(" - data/processed/wind_scenarios_used.csv")
 

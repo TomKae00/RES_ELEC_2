@@ -17,7 +17,7 @@ from helpers import CAPACITY_MW
 def plot_hourly_offer(
     offer: np.ndarray,
     filename: str,
-    #title: str,
+    title: str | None = None,
     capacity_mw: float = CAPACITY_MW
 ) -> None:
     hours = np.arange(24)
@@ -31,7 +31,8 @@ def plot_hourly_offer(
         label=f"Capacity: {capacity_mw:.0f} MW"
     )
 
-    #plt.title(title)
+    if title:
+        plt.title(title)
     plt.xlabel("Hour")
     plt.ylabel("Day-ahead offer [MW]")
     plt.xticks(hours)
@@ -50,10 +51,14 @@ def plot_hourly_offer(
 def plot_profit_distribution(
     profits: List[float],
     filename: str,
+    title: str | None = None,
 ) -> None:
     expected_profit = np.mean(profits)
 
     plt.figure(figsize=(8, 5))
+    if title:
+        plt.title(title)
+
     plt.hist(profits, bins=35, edgecolor="black", alpha=0.8)
     plt.axvline(
         expected_profit,

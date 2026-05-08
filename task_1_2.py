@@ -178,36 +178,36 @@ def main():
 
     profits = evaluate_two_price_across_scenarios(offer, data, combined)
 
-    save_offer_to_csv(offer, "outputs/tables/task_1_2_offer.csv")
+    save_offer_to_csv(offer, "outputs/tables/task_1_2/task_1_2_offer.csv")
     save_wind_scenarios_to_csv(data.wind, "data/processed/wind_scenarios_used.csv")
     
     plot_hourly_offer(
     offer=offer,
-    filename="outputs/figures/task_1_2_hourly_offer.png",
+    filename="outputs/figures/task_1_2/task_1_2_hourly_offer.png",
     )
 
     plot_profit_distribution(
     profits=profits,
-    filename="outputs/figures/task_1_2_profit_distribution.png",
+    filename="outputs/figures/task_1_2/task_1_2_profit_distribution.png",
     )
 
     plot_profit_by_scenario(
     profits=profits,
-    filename="outputs/figures/task_1_2_profit_by_scenario.png",
+    filename="outputs/figures/task_1_2/task_1_2_profit_by_scenario.png",
     )
 
-    one_price_df = pd.read_csv("outputs/tables/task_1_1_offer.csv")
+    one_price_df = pd.read_csv("outputs/tables/task_1_1/task_1_1_offer.csv")
     offer_one = one_price_df["offer_MW"].to_numpy()
     plot_offer_comparison(
         offer_one_price=offer_one,
         offer_two_price=offer,
-        filename="outputs/figures/task_1_1_vs_1_2_offer_comparison.png",
+        filename="outputs/figures/task_1_2/task_1_1_vs_1_2_offer_comparison.png",
     )
 
 
     print("\nFiles saved:")
-    print(" - outputs/tables/task_1_2_offer.csv")
-    print(" - outputs/figures/task_1_2_profit_distribution.png")
+    print(" - outputs/tables/task_1_2/task_1_2_offer.csv")
+    print(" - outputs/figures/task_1_2/task_1_2_profit_distribution.png")
 
 
 if __name__ == "__main__":
