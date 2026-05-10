@@ -38,7 +38,7 @@ def plot_hourly_offer(
     plt.xticks(hours)
     plt.ylim(0, capacity_mw * 1.10)
     plt.grid(True, alpha=0.3)
-    plt.legend()
+    plt.legend(title="")
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
     plt.close()
@@ -70,7 +70,7 @@ def plot_profit_distribution(
     plt.xlabel("Scenario profit [EUR]")
     plt.ylabel("Frequency")
     plt.grid(True, alpha=0.3)
-    plt.legend()
+    plt.legend(title="")
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
     plt.close()
@@ -181,9 +181,9 @@ def plot_profit_vs_cvar_single_scheme(results_df, scheme, filename, title=None):
 
     ax.set_xlabel("CVaR [EUR]")
     ax.set_ylabel("Expected Profit [EUR]")
-    ax.set_title(title if title else f"Expected Profit vs CVaR - {scheme}")
+    #ax.set_title(title if title else f"Expected Profit vs CVaR - {scheme}")
     ax.grid(True, linestyle="--", alpha=0.5)
-    ax.legend()
+    ax.legend(title="")
 
     # Optional: tighter axis limits
     x = df["cvar_profit"].to_numpy()
@@ -220,7 +220,7 @@ def plot_risk_profit_distributions(
             label=f"$\\beta={beta}$"
         )
 
-    plt.title(title)
+
     plt.xlabel("Scenario profit [EUR]")
     plt.ylabel("Frequency")
     plt.grid(True, alpha=0.3)
