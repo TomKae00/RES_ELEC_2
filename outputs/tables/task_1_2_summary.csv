@@ -1,0 +1,2 @@
+expected_profit_optimizer_eur,mean_evaluated_profit_eur,difference_optimizer_vs_evaluated_eur,min_scenario_profit_eur,max_scenario_profit_eur,std_scenario_profit_eur,both_delta_variables_active_count
+916868.8483645812,916868.4932084999,-0.35515608137939125,297540.8518971842,1431272.8042009138,273233.2125864181,160

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 
+from typing import List
+
 import numpy as np
 import pandas as pd
 import gurobipy as gp
@@ -21,7 +23,6 @@ from helpers import (
 
 from plotting import (
     plot_hourly_offer,
-    plot_profit_distribution,
     plot_profit_by_scenario,
 )
 
@@ -155,6 +156,181 @@ def build_all_or_nothing_summary(offer: np.ndarray) -> dict:
         "full_capacity_offer_hours": full_hours,
         "interior_offer_hours": interior_hours,
     }
+
+
+def calculate_expected_price_spread(data, combined) -> np.ndarray:
+    """
+    Calculate the hourly expected price spread between day-ahead and balancing prices.
+
+    For the one-price formulation, the offer-dependent part of the objective is
+    proportional to the expected spread:
+
+        E[lambda_DA - lambda_B]
+
+    If this value is positive in an hour, offering the upper bound is optimal.
+    If it is negative, offering the lower bound is optimal.
+
+    Parameters
+    ----------
+    data : ScenarioData
+        Scenario data containing day-ahead prices and balancing prices.
+
+    combined : CombinedScenarioSet
+        Combined scenario set containing scenario tuples and probabilities.
+
+    Returns
+    -------
+    np.ndarray
+        Hourly expected spread E[lambda_DA - lambda_B] [EUR/MWh].
+    """
+
+    expected_spread = np.zeros(len(HOURS))
+
+    for scenario in combined.scenarios:
+        _, p_s, i_s = scenario
+        probability = combined.probability[scenario]
+
+        da_price = data.price[p_s]
+        balancing_price = data.balancing_price[(p_s, i_s)]
+
+        for t in HOURS:
+            expected_spread[t] += probability * (
+                da_price[t] - balancing_price[t]
+            )
+
+    return expected_spread
+
+
+def plot_expected_price_spread_with_offer(
+    expected_spread: np.ndarray,
+    offer: np.ndarray,
+    filename: str,
+    title: str | None = None,
+) -> None:
+    """
+    Plot the expected day-ahead minus balancing price spread and the optimal offer.
+    """
+
+    import matplotlib.pyplot as plt
+
+    fontsize = 14
+    one_price_color = "#1f77b4"
+    spread_color = "lightgrey"
+
+    plt.rcParams.update({
+        "font.size": fontsize,
+        "axes.labelsize": fontsize,
+        "xtick.labelsize": fontsize,
+        "ytick.labelsize": fontsize,
+        "legend.fontsize": fontsize,
+    })
+
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+
+    ax1.bar(
+        HOURS,
+        expected_spread,
+        width=0.75,
+        alpha=0.8,
+        color=spread_color,
+        edgecolor="black",
+        linewidth=0.6,
+        label=r"$\mathbb{E}[\lambda^{\mathrm{DA}}-\lambda^{\mathrm{B}}]$",
+    )
+
+    ax1.axhline(0.0, color="black", linestyle="--", linewidth=1.5)
+
+    ax1.set_xlabel("Hour")
+    ax1.set_ylabel("Expected price spread [EUR/MWh]")
+    ax1.set_xticks(HOURS)
+    ax1.set_xlim(-0.5, 23.5)
+    ax1.grid(True, linestyle="--", alpha=0.4)
+
+    ax2 = ax1.twinx()
+    ax2.step(
+        HOURS,
+        offer,
+        where="mid",
+        linewidth=2.2,
+        color=one_price_color,
+        label="One-price offer",
+    )
+    ax2.scatter(
+        HOURS,
+        offer,
+        s=25,
+        color=one_price_color,
+    )
+
+    ax2.set_ylabel("Day-ahead offer [MW]")
+    ax2.set_ylim(-0.05 * CAPACITY_MW, 1.10 * CAPACITY_MW)
+
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+
+    ax1.legend(
+        lines_1 + lines_2,
+        labels_1 + labels_2,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.18),
+        ncol=2,
+        frameon=True,
+    )
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_profit_distribution(
+    profits: List[float],
+    filename: str,
+    title: str | None = None,
+) -> None:
+    """
+    Plot the distribution of scenario profits and the expected profit.
+    """
+
+    import matplotlib.pyplot as plt
+
+    fontsize = 14
+    one_price_color = "#1f77b4"
+    expected_profit = np.mean(profits)
+
+    plt.rcParams.update({
+        "font.size": fontsize,
+        "axes.labelsize": fontsize,
+        "xtick.labelsize": fontsize,
+        "ytick.labelsize": fontsize,
+        "legend.fontsize": fontsize,
+    })
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    ax.hist(
+        profits,
+        bins=35,
+        color=one_price_color,
+        edgecolor="black",
+        alpha=0.4,
+    )
+
+    ax.axvline(
+        expected_profit,
+        color="black",
+        linestyle="--",
+        linewidth=1.8,
+        label=f"Expected profit: {expected_profit:,.0f} EUR",
+    )
+
+    ax.set_xlabel("Scenario profit [EUR]")
+    ax.set_ylabel("Frequency")
+    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.legend(loc="best")
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 
 def save_task_summary(
@@ -298,6 +474,31 @@ def main():
 
     all_or_nothing_summary = build_all_or_nothing_summary(offer)
 
+    expected_spread = calculate_expected_price_spread(
+        data=data,
+        combined=combined,
+    )
+
+    spread_df = pd.DataFrame(
+        {
+            "hour": HOURS,
+            "expected_da_minus_balancing_price_eur_per_mwh": expected_spread,
+            "optimal_offer_MW": offer,
+        }
+    )
+    spread_df.to_csv(
+        "outputs/tables/task_1_1_expected_price_spread.csv",
+        index=False,
+    )
+
+    print("\nExpected DA minus balancing price spread:")
+    for t in HOURS:
+        print(
+            f"Hour {t:02d}: "
+            f"{expected_spread[t]:.2f} EUR/MWh, "
+            f"offer = {offer[t]:.2f} MW"
+        )
+
     print("\nAll-or-nothing diagnostic:")
     print(f"Hours with 0 MW offer: {all_or_nothing_summary['zero_offer_hours']}")
     print(f"Hours with 500 MW offer: {all_or_nothing_summary['full_capacity_offer_hours']}")
@@ -351,6 +552,13 @@ def main():
         title="Task 1.1 Profit Across Scenarios - One-Price Scheme",
     )
 
+    plot_expected_price_spread_with_offer(
+        expected_spread=expected_spread,
+        offer=offer,
+        filename="outputs/figures/task_1_1_expected_price_spread_with_offer.png",
+        title="Task 1.1 Expected Price Spread and Optimal Offer",
+    )
+
     print("\nFiles saved:")
     print(" - outputs/tables/task_1_1_offer.csv")
     print(" - outputs/tables/task_1_1_model_stats.csv")
@@ -358,6 +566,8 @@ def main():
     print(" - outputs/figures/task_1_1_hourly_offer.png")
     print(" - outputs/figures/task_1_1_profit_distribution.png")
     print(" - outputs/figures/task_1_1_profit_by_scenario.png")
+    print(" - outputs/tables/task_1_1_expected_price_spread.csv")
+    print(" - outputs/figures/task_1_1_expected_price_spread_with_offer.png")
     print(" - data/processed/price_hourly_daily.csv")
     print(" - data/processed/wind_scenarios_used.csv")
 

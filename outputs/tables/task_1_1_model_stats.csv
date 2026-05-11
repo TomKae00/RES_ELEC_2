@@ -1,0 +1,2 @@
+model,variables,constraints,solve_time_s,objective_value_eur
+Task 1.1 one-price,24,0,0.0003767780144698918,1003703.9288620979

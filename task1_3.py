@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -215,7 +217,10 @@ def run_cross_validation_for_k(
     print("=" * 70)
     print(f"Total combined scenarios: {len(combined.scenarios)}")
     print(f"In-sample scenarios per fold: {len(folds[0])}")
-    print(f"Out-of-sample scenarios per fold: {len(combined.scenarios) - len(folds[0])}")
+    print(
+        f"Out-of-sample scenarios per fold: "
+        f"{len(combined.scenarios) - len(folds[0])}"
+    )
 
     for fold_idx in range(k_folds):
         fold_id = fold_idx + 1
@@ -338,6 +343,145 @@ def build_sensitivity_summary(summary_df: pd.DataFrame) -> pd.DataFrame:
     return sensitivity_df
 
 
+def plot_k8_cross_validation_profits(
+    results_df: pd.DataFrame,
+    filename: str,
+) -> None:
+    """
+    Plot in-sample and out-of-sample expected profits for the required K=8 case.
+
+    The plot shows whether the fold-specific profits obtained on the scenarios
+    used for optimization are close to the profits obtained on unseen scenarios.
+
+    Parameters
+    ----------
+    results_df : pd.DataFrame
+        Fold-level cross-validation results for all tested values of K.
+
+    filename : str
+        Path where the figure should be saved.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    import matplotlib.pyplot as plt
+
+    fontsize = 14
+    one_price_color = "#1f77b4"
+    two_price_color = "#ff7f0e"
+
+    df = results_df[results_df["k_folds"] == 8].copy()
+
+    if df.empty:
+        raise ValueError("No K=8 results found in results_df.")
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    plot_specs = {
+        "one-price": {"marker": "o", "color": one_price_color},
+        "two-price": {"marker": "s", "color": two_price_color},
+    }
+
+    for scheme, spec in plot_specs.items():
+        scheme_df = df[df["scheme"] == scheme].sort_values("fold")
+
+        ax.plot(
+            scheme_df["fold"],
+            scheme_df["in_sample_expected_profit_eur"],
+            marker=spec["marker"],
+            linestyle="-",
+            linewidth=2,
+            color=spec["color"],
+            alpha=0.4,
+            label=f"{scheme} in-sample",
+        )
+
+        ax.plot(
+            scheme_df["fold"],
+            scheme_df["out_sample_expected_profit_eur"],
+            marker=spec["marker"],
+            linestyle="--",
+            linewidth=2,
+            color=spec["color"],
+            alpha=0.75,
+            label=f"{scheme} out-of-sample",
+        )
+
+    ax.set_xlabel("Cross-validation fold", fontsize=fontsize)
+    ax.set_ylabel("Expected profit [EUR]", fontsize=fontsize)
+
+    ax.set_xticks(sorted(df["fold"].unique()))
+    ax.tick_params(axis="both", labelsize=fontsize)
+    ax.yaxis.get_offset_text().set_fontsize(fontsize)
+
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend(loc="best", fontsize=fontsize)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_in_sample_size_sensitivity(
+    summary_df: pd.DataFrame,
+    filename: str,
+) -> None:
+    """
+    Plot mean out-of-sample profit as a function of in-sample size.
+
+    This plot is used to assess whether changing the number of in-sample
+    scenarios improves out-of-sample decision quality.
+
+    Parameters
+    ----------
+    summary_df : pd.DataFrame
+        Cross-validation summary grouped by fold count and scheme.
+
+    filename : str
+        Path where the figure should be saved.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    plot_specs = {
+        "one-price": {"marker": "o"},
+        "two-price": {"marker": "s"},
+    }
+
+    for scheme, spec in plot_specs.items():
+        scheme_df = summary_df[summary_df["scheme"] == scheme].copy()
+        scheme_df = scheme_df.sort_values("n_in_sample")
+
+        ax.plot(
+            scheme_df["n_in_sample"],
+            scheme_df["mean_out_sample_profit_eur"],
+            marker=spec["marker"],
+            linewidth=2,
+            label=scheme,
+        )
+
+    ax.set_xlabel("In-sample scenarios")
+    ax.set_ylabel("Mean out-of-sample expected profit [EUR]")
+    ax.set_title("Task 1.3 Sensitivity to In-Sample Scenario Size")
+    ax.set_xticks(sorted(summary_df["n_in_sample"].unique()))
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend(loc="best")
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300)
+    plt.close(fig)
+
+
 def main():
     """
     Run the complete Task 1.3 cross-validation workflow.
@@ -350,11 +494,13 @@ def main():
     Returns
     -------
     None
-        The function writes fold-level results, summary tables, and the
-        sensitivity comparison to the ``Outputs/tables`` folder.
+        The function writes fold-level results, summary tables, sensitivity
+        comparison tables, and figures to the output folders.
     """
 
     ensure_output_folders()
+    os.makedirs("Outputs/tables", exist_ok=True)
+    os.makedirs("Outputs/figures", exist_ok=True)
 
     wind_file = "Data/scen_zone2.csv"
     price_file = "Data/DayAheadPrices.csv"
@@ -425,6 +571,17 @@ def main():
         index=False,
     )
 
+    # Plots for report.
+    plot_k8_cross_validation_profits(
+        results_df=results_df,
+        filename="Outputs/figures/task_1_3_k8_in_vs_out_profit.png",
+    )
+
+    plot_in_sample_size_sensitivity(
+        summary_df=summary_df,
+        filename="Outputs/figures/task_1_3_in_sample_size_sensitivity.png",
+    )
+
     print("\nRequired 8-fold cross-validation summary:")
     print(required_summary_df)
 
@@ -437,6 +594,9 @@ def main():
     print(" - Outputs/tables/task_1_3_cross_validation_results_all_k.csv")
     print(" - Outputs/tables/task_1_3_cross_validation_summary_all_k.csv")
     print(" - Outputs/tables/task_1_3_in_sample_size_sensitivity.csv")
+    print(" - Outputs/figures/task_1_3_k8_in_vs_out_profit.png")
+    print(" - Outputs/figures/task_1_3_in_sample_size_sensitivity.png")
+
     for k_folds in fold_counts:
         print(f" - Outputs/tables/task_1_3_cross_validation_results_k{k_folds}.csv")
 

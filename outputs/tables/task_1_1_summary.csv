@@ -1,0 +1,2 @@
+expected_profit_optimizer_eur,mean_evaluated_profit_eur,difference_optimizer_vs_evaluated_eur,min_scenario_profit_eur,max_scenario_profit_eur,std_scenario_profit_eur,zero_offer_hours,full_capacity_offer_hours,interior_offer_hours
+1003703.9288620979,1003703.9288620896,-8.265487849712372e-09,335824.0845377218,1585264.790801484,297565.35043586494,13,11,0
