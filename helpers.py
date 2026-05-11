@@ -41,8 +41,12 @@ class CombinedScenarioSet:
 def ensure_output_folders() -> None:
     os.makedirs("outputs", exist_ok=True)
     os.makedirs("outputs/figures", exist_ok=True)
+    os.makedirs("outputs/figures/task_1_1", exist_ok=True)
+    os.makedirs("outputs/figures/task_1_2", exist_ok=True)
     os.makedirs("outputs/tables", exist_ok=True)
-    os.makedirs("data", exist_ok=True)
+    os.makedirs("outputs/tables/task_1_1", exist_ok=True)
+    os.makedirs("outputs/tables/task_1_2", exist_ok=True)
+    os.makedirs("../../../Downloads/data", exist_ok=True)
     os.makedirs("data/processed", exist_ok=True)
 
 
@@ -393,4 +397,143 @@ def make_k_folds(scenarios, k: int = 8, seed: int = 42):
 
     return folds
 
+# --------------------------------
+# Volatile synthetic test scenarios
+# --------------------------------
+def prepare_volatile_test_scenario_data(
+    n_wind_scenarios: int = 30,
+    n_price_scenarios: int = 30,
+    n_imbalance_scenarios: int = 8,
+    deficit_probability: float = 0.5,
+    seed: int | None = 42,
+    capacity_mw: float = CAPACITY_MW,
+) -> Tuple[ScenarioData, CombinedScenarioSet]:
+    """
+    Creates synthetic volatile scenarios for testing the risk-averse model.
+
+    This is NOT meant for final assignment results.
+    It is useful for checking whether the CVaR model reacts correctly
+    when the scenario set contains stronger downside risk.
+
+    The function creates:
+        - wind scenarios with large variation and occasional low-wind events
+        - price scenarios with strong morning/evening peaks and random spikes
+        - imbalance scenarios with random deficit/surplus states
+        - balancing prices using the assignment rule:
+            deficit: BP = 1.25 * DA price
+            surplus: BP = 0.85 * DA price
+    """
+
+    rng = np.random.default_rng(seed)
+
+    hours = np.array(HOURS)
+
+    # ------------------------------------------------------------
+    # Wind scenarios
+    # ------------------------------------------------------------
+    wind = {}
+
+    # Smooth daily base profile, around 55-75% of capacity
+    base_wind = capacity_mw * (
+        0.62
+        + 0.10 * np.sin(2 * np.pi * (hours - 5) / 24)
+        + 0.05 * np.sin(4 * np.pi * hours / 24)
+    )
+
+    for s in range(n_wind_scenarios):
+        # Scenario-level mean shift
+        level_shift = rng.normal(0.0, 80.0)
+
+        # Hourly correlated noise
+        noise = rng.normal(0.0, 55.0, size=24)
+        for t in range(1, 24):
+            noise[t] = 0.70 * noise[t - 1] + 0.30 * noise[t]
+
+        wind_profile = base_wind + level_shift + noise
+
+        # Add occasional low-wind event lasting several hours
+        if rng.random() < 0.35:
+            start = rng.integers(0, 18)
+            duration = rng.integers(4, 9)
+            reduction = rng.uniform(120.0, 260.0)
+            wind_profile[start:start + duration] -= reduction
+
+        # Add occasional high-wind event
+        if rng.random() < 0.25:
+            start = rng.integers(0, 18)
+            duration = rng.integers(3, 7)
+            increase = rng.uniform(80.0, 180.0)
+            wind_profile[start:start + duration] += increase
+
+        wind[s] = np.clip(wind_profile, 0.0, capacity_mw)
+
+    # ------------------------------------------------------------
+    # Day-ahead price scenarios
+    # ------------------------------------------------------------
+    price = {}
+
+    # Daily price shape: lower mid-day, higher evening
+    base_price = (
+        75.0
+        + 25.0 * np.sin(2 * np.pi * (hours - 6) / 24)
+        + 70.0 * np.exp(-((hours - 18) / 3.0) ** 2)
+        + 35.0 * np.exp(-((hours - 7) / 2.5) ** 2)
+    )
+
+    for s in range(n_price_scenarios):
+        level_shift = rng.normal(0.0, 25.0)
+        noise = rng.normal(0.0, 25.0, size=24)
+
+        for t in range(1, 24):
+            noise[t] = 0.60 * noise[t - 1] + 0.40 * noise[t]
+
+        price_profile = base_price + level_shift + noise
+
+        # Add random price spikes
+        n_spikes = rng.integers(1, 4)
+        spike_hours = rng.choice(hours, size=n_spikes, replace=False)
+        for h in spike_hours:
+            price_profile[h] += rng.uniform(80.0, 220.0)
+
+        # Add occasional very low or near-zero prices
+        if rng.random() < 0.30:
+            start = rng.integers(8, 15)
+            duration = rng.integers(2, 5)
+            price_profile[start:start + duration] -= rng.uniform(50.0, 100.0)
+
+        price[s] = np.clip(price_profile, 0.0, None)
+
+    # ------------------------------------------------------------
+    # Imbalance scenarios
+    # ------------------------------------------------------------
+    imbalance = generate_imbalance_scenarios(
+        n_scenarios=n_imbalance_scenarios,
+        deficit_probability=deficit_probability,
+        seed=seed,
+    )
+
+    # ------------------------------------------------------------
+    # Balancing prices and combined scenarios
+    # ------------------------------------------------------------
+    balancing_price = compute_balancing_prices(
+        price_scenarios=price,
+        imbalance_scenarios=imbalance,
+        deficit_multiplier=1.25,
+        surplus_multiplier=0.85,
+    )
+
+    combined = build_combined_scenarios(
+        wind_scenarios=wind,
+        price_scenarios=price,
+        imbalance_scenarios=imbalance,
+    )
+
+    data = ScenarioData(
+        wind=wind,
+        price=price,
+        imbalance=imbalance,
+        balancing_price=balancing_price,
+    )
+
+    return data, combined
 

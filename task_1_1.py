@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
-from typing import List
-
+import gurobipy as gp
 import numpy as np
 import pandas as pd
-import gurobipy as gp
 from gurobipy import GRB
 
 from helpers import (
     HOURS,
     CAPACITY_MW,
-    ensure_output_folders,
     prepare_scenario_data,
     evaluate_one_price_across_scenarios,
     save_offer_to_csv,
@@ -22,9 +20,13 @@ from helpers import (
 )
 
 from plotting import (
-    plot_hourly_offer,
-    plot_profit_by_scenario,
+    plot_expected_price_spread_with_offer,
+    plot_profit_distribution,
 )
+
+
+TASK_1_OUTPUT_DIR = Path("outputs") / "task_1"
+TASK_1_1_OUTPUT_DIR = TASK_1_OUTPUT_DIR / "task_1_1"
 
 
 def solve_one_price_offering_problem(data, combined):
@@ -72,8 +74,6 @@ def solve_one_price_offering_problem(data, combined):
     model = gp.Model("task_1_1_one_price")
     model.setParam("OutputFlag", 1)
 
-    # First-stage decision variables:
-    # one hourly day-ahead offer, independent of the realized scenario.
     offer = model.addVars(
         HOURS,
         lb=0.0,
@@ -129,12 +129,6 @@ def build_all_or_nothing_summary(offer: np.ndarray) -> dict:
     """
     Count the number of hours with zero, full-capacity, and interior offers.
 
-    This diagnostic is useful for Task 1.1 because the one-price settlement
-    scheme can lead to all-or-nothing bidding behavior. If the offer is close
-    to either 0 MW or installed capacity in most hours, this indicates that the
-    wind farm is exploiting the expected spread between day-ahead and balancing
-    prices rather than offering a forecast-like production quantity.
-
     Parameters
     ----------
     offer : np.ndarray
@@ -143,8 +137,7 @@ def build_all_or_nothing_summary(offer: np.ndarray) -> dict:
     Returns
     -------
     dict
-        Dictionary containing the number of hours with a zero offer, a
-        full-capacity offer, and an interior offer.
+        Number of zero-offer, full-capacity-offer, and interior-offer hours.
     """
 
     zero_hours = int(np.sum(np.isclose(offer, 0.0)))
@@ -160,10 +153,10 @@ def build_all_or_nothing_summary(offer: np.ndarray) -> dict:
 
 def calculate_expected_price_spread(data, combined) -> np.ndarray:
     """
-    Calculate the hourly expected price spread between day-ahead and balancing prices.
+    Calculate the hourly expected day-ahead minus balancing price spread.
 
     For the one-price formulation, the offer-dependent part of the objective is
-    proportional to the expected spread:
+    proportional to:
 
         E[lambda_DA - lambda_B]
 
@@ -201,138 +194,6 @@ def calculate_expected_price_spread(data, combined) -> np.ndarray:
     return expected_spread
 
 
-def plot_expected_price_spread_with_offer(
-    expected_spread: np.ndarray,
-    offer: np.ndarray,
-    filename: str,
-    title: str | None = None,
-) -> None:
-    """
-    Plot the expected day-ahead minus balancing price spread and the optimal offer.
-    """
-
-    import matplotlib.pyplot as plt
-
-    fontsize = 14
-    one_price_color = "#1f77b4"
-    spread_color = "lightgrey"
-
-    plt.rcParams.update({
-        "font.size": fontsize,
-        "axes.labelsize": fontsize,
-        "xtick.labelsize": fontsize,
-        "ytick.labelsize": fontsize,
-        "legend.fontsize": fontsize,
-    })
-
-    fig, ax1 = plt.subplots(figsize=(10, 5))
-
-    ax1.bar(
-        HOURS,
-        expected_spread,
-        width=0.75,
-        alpha=0.8,
-        color=spread_color,
-        edgecolor="black",
-        linewidth=0.6,
-        label=r"$\mathbb{E}[\lambda^{\mathrm{DA}}-\lambda^{\mathrm{B}}]$",
-    )
-
-    ax1.axhline(0.0, color="black", linestyle="--", linewidth=1.5)
-
-    ax1.set_xlabel("Hour")
-    ax1.set_ylabel("Expected price spread [EUR/MWh]")
-    ax1.set_xticks(HOURS)
-    ax1.set_xlim(-0.5, 23.5)
-    ax1.grid(True, linestyle="--", alpha=0.4)
-
-    ax2 = ax1.twinx()
-    ax2.step(
-        HOURS,
-        offer,
-        where="mid",
-        linewidth=2.2,
-        color=one_price_color,
-        label="One-price offer",
-    )
-    ax2.scatter(
-        HOURS,
-        offer,
-        s=25,
-        color=one_price_color,
-    )
-
-    ax2.set_ylabel("Day-ahead offer [MW]")
-    ax2.set_ylim(-0.05 * CAPACITY_MW, 1.10 * CAPACITY_MW)
-
-    lines_1, labels_1 = ax1.get_legend_handles_labels()
-    lines_2, labels_2 = ax2.get_legend_handles_labels()
-
-    ax1.legend(
-        lines_1 + lines_2,
-        labels_1 + labels_2,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.18),
-        ncol=2,
-        frameon=True,
-    )
-
-    fig.tight_layout()
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_profit_distribution(
-    profits: List[float],
-    filename: str,
-    title: str | None = None,
-) -> None:
-    """
-    Plot the distribution of scenario profits and the expected profit.
-    """
-
-    import matplotlib.pyplot as plt
-
-    fontsize = 14
-    one_price_color = "#1f77b4"
-    expected_profit = np.mean(profits)
-
-    plt.rcParams.update({
-        "font.size": fontsize,
-        "axes.labelsize": fontsize,
-        "xtick.labelsize": fontsize,
-        "ytick.labelsize": fontsize,
-        "legend.fontsize": fontsize,
-    })
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-
-    ax.hist(
-        profits,
-        bins=35,
-        color=one_price_color,
-        edgecolor="black",
-        alpha=0.4,
-    )
-
-    ax.axvline(
-        expected_profit,
-        color="black",
-        linestyle="--",
-        linewidth=1.8,
-        label=f"Expected profit: {expected_profit:,.0f} EUR",
-    )
-
-    ax.set_xlabel("Scenario profit [EUR]")
-    ax.set_ylabel("Frequency")
-    ax.grid(True, linestyle="--", alpha=0.3)
-    ax.legend(loc="best")
-
-    fig.tight_layout()
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
 def save_task_summary(
     expected_profit: float,
     evaluated_mean_profit: float,
@@ -340,14 +201,10 @@ def save_task_summary(
     evaluated_max_profit: float,
     evaluated_std_profit: float,
     all_or_nothing_summary: dict,
-    filename: str,
+    filename: str | Path,
 ) -> None:
     """
     Save a compact numerical summary of Task 1.1 results.
-
-    The summary is intended for later use in the report. It includes the
-    optimizer objective value, ex-post evaluated profit statistics, and the
-    all-or-nothing diagnostic for the optimal day-ahead offer.
 
     Parameters
     ----------
@@ -367,10 +224,10 @@ def save_task_summary(
         Standard deviation of scenario profits [EUR].
 
     all_or_nothing_summary : dict
-        Dictionary returned by ``build_all_or_nothing_summary`` containing the
-        number of zero-offer, full-capacity-offer, and interior-offer hours.
+        Dictionary containing the number of zero-offer, full-capacity-offer,
+        and interior-offer hours.
 
-    filename : str
+    filename : str | Path
         Path where the summary CSV file should be saved.
 
     Returns
@@ -392,34 +249,23 @@ def save_task_summary(
     pd.DataFrame([summary]).to_csv(filename, index=False)
 
 
-def main():
+def main() -> None:
     """
     Run the complete Task 1.1 workflow.
 
     The workflow prepares the scenario data, solves the one-price stochastic
-    offering problem, evaluates the optimal offer across all combined
-    scenarios, saves result tables, and creates the figures needed for the
-    report.
+    offering problem, evaluates the optimal offer across all combined scenarios,
+    saves result tables, and creates the figures needed for the report.
 
-    The generated outputs include:
-    - optimal hourly offer,
-    - model statistics,
-    - compact summary table,
-    - profit distribution plot,
-    - profit-by-scenario plot,
-    - hourly offer plot.
+    All outputs are saved in:
 
-    Returns
-    -------
-    None
-        The function writes outputs to the ``outputs`` and ``data/processed``
-        folders and prints a compact summary to the terminal.
+        outputs/task_1/task_1_1/
     """
 
-    ensure_output_folders()
+    TASK_1_1_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    wind_file = "Data/scen_zone2.csv"
-    price_file = "Data/DayAheadPrices.csv"
+    wind_file = "data/scen_zone2.csv"
+    price_file = "data/DayAheadPrices.csv"
 
     data, combined = prepare_scenario_data(
         wind_scenario_file=wind_file,
@@ -479,18 +325,6 @@ def main():
         combined=combined,
     )
 
-    spread_df = pd.DataFrame(
-        {
-            "hour": HOURS,
-            "expected_da_minus_balancing_price_eur_per_mwh": expected_spread,
-            "optimal_offer_MW": offer,
-        }
-    )
-    spread_df.to_csv(
-        "outputs/tables/task_1_1_expected_price_spread.csv",
-        index=False,
-    )
-
     print("\nExpected DA minus balancing price spread:")
     for t in HOURS:
         print(
@@ -501,7 +335,10 @@ def main():
 
     print("\nAll-or-nothing diagnostic:")
     print(f"Hours with 0 MW offer: {all_or_nothing_summary['zero_offer_hours']}")
-    print(f"Hours with 500 MW offer: {all_or_nothing_summary['full_capacity_offer_hours']}")
+    print(
+        "Hours with 500 MW offer: "
+        f"{all_or_nothing_summary['full_capacity_offer_hours']}"
+    )
     print(f"Hours with interior offer: {all_or_nothing_summary['interior_offer_hours']}")
 
     print("\nModel statistics:")
@@ -509,13 +346,46 @@ def main():
     print(f"Constraints: {model_stats['constraints']}")
     print(f"Solve time: {model_stats['solve_time_s']:.4f} s")
 
+    # ------------------------------------------------------------------
+    # Output files
+    # ------------------------------------------------------------------
+
+    offer_file = TASK_1_1_OUTPUT_DIR / "task_1_1_offer.csv"
+    model_stats_file = TASK_1_1_OUTPUT_DIR / "task_1_1_model_stats.csv"
+    summary_file = TASK_1_1_OUTPUT_DIR / "task_1_1_summary.csv"
+    spread_file = TASK_1_1_OUTPUT_DIR / "task_1_1_expected_price_spread.csv"
+    wind_scenarios_file = TASK_1_1_OUTPUT_DIR / "task_1_1_wind_scenarios_used.csv"
+    scenario_profit_file = TASK_1_1_OUTPUT_DIR / "task_1_1_scenario_profits.csv"
+
+    profit_distribution_plot_file = (
+        TASK_1_1_OUTPUT_DIR / "task_1_1_profit_distribution.png"
+    )
+    spread_offer_plot_file = (
+        TASK_1_1_OUTPUT_DIR / "task_1_1_expected_price_spread_with_offer.png"
+    )
+
+    spread_df = pd.DataFrame(
+        {
+            "hour": HOURS,
+            "expected_da_minus_balancing_price_eur_per_mwh": expected_spread,
+            "optimal_offer_mw": offer,
+        }
+    )
+
+    scenario_profit_df = pd.DataFrame(
+        {
+            "scenario": np.arange(len(profits)),
+            "profit_eur": profits,
+        }
+    )
+
     save_offer_to_csv(
         offer=offer,
-        filename="outputs/tables/task_1_1_offer.csv",
+        filename=str(offer_file),
     )
 
     pd.DataFrame([model_stats]).to_csv(
-        "outputs/tables/task_1_1_model_stats.csv",
+        model_stats_file,
         index=False,
     )
 
@@ -526,50 +396,40 @@ def main():
         evaluated_max_profit=evaluated_max_profit,
         evaluated_std_profit=evaluated_std_profit,
         all_or_nothing_summary=all_or_nothing_summary,
-        filename="outputs/tables/task_1_1_summary.csv",
+        filename=summary_file,
     )
+
+    spread_df.to_csv(spread_file, index=False)
+    scenario_profit_df.to_csv(scenario_profit_file, index=False)
 
     save_wind_scenarios_to_csv(
         wind_scenarios=data.wind,
-        filename="data/processed/wind_scenarios_used.csv",
-    )
-
-    plot_hourly_offer(
-        offer=offer,
-        filename="outputs/figures/task_1_1_hourly_offer.png",
-        title="Task 1.1 Optimal Hourly Offer - One-Price Scheme",
+        filename=str(wind_scenarios_file),
     )
 
     plot_profit_distribution(
         profits=profits,
-        filename="outputs/figures/task_1_1_profit_distribution.png",
-        title="Task 1.1 Profit Distribution - One-Price Scheme",
-    )
-
-    plot_profit_by_scenario(
-        profits=profits,
-        filename="outputs/figures/task_1_1_profit_by_scenario.png",
-        title="Task 1.1 Profit Across Scenarios - One-Price Scheme",
+        filename=str(profit_distribution_plot_file),
     )
 
     plot_expected_price_spread_with_offer(
         expected_spread=expected_spread,
         offer=offer,
-        filename="outputs/figures/task_1_1_expected_price_spread_with_offer.png",
-        title="Task 1.1 Expected Price Spread and Optimal Offer",
+        filename=str(spread_offer_plot_file),
     )
 
     print("\nFiles saved:")
-    print(" - outputs/tables/task_1_1_offer.csv")
-    print(" - outputs/tables/task_1_1_model_stats.csv")
-    print(" - outputs/tables/task_1_1_summary.csv")
-    print(" - outputs/figures/task_1_1_hourly_offer.png")
-    print(" - outputs/figures/task_1_1_profit_distribution.png")
-    print(" - outputs/figures/task_1_1_profit_by_scenario.png")
-    print(" - outputs/tables/task_1_1_expected_price_spread.csv")
-    print(" - outputs/figures/task_1_1_expected_price_spread_with_offer.png")
-    print(" - data/processed/price_hourly_daily.csv")
-    print(" - data/processed/wind_scenarios_used.csv")
+    for file in [
+        offer_file,
+        model_stats_file,
+        summary_file,
+        spread_file,
+        scenario_profit_file,
+        wind_scenarios_file,
+        profit_distribution_plot_file,
+        spread_offer_plot_file,
+    ]:
+        print(f" - {file}")
 
 
 if __name__ == "__main__":

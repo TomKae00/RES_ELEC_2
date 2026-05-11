@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
+import gurobipy as gp
 import numpy as np
 import pandas as pd
-import gurobipy as gp
 from gurobipy import GRB
 
 from helpers import (
     HOURS,
     CAPACITY_MW,
-    ensure_output_folders,
     prepare_scenario_data,
     evaluate_one_price_across_scenarios,
     save_offer_to_csv,
@@ -20,9 +20,15 @@ from helpers import (
 )
 
 from plotting import (
-    plot_hourly_offer,
-    plot_profit_by_scenario,
+    plot_profit_distribution_with_bins,
+    plot_profit_distribution_comparison,
+    plot_offer_comparison,
 )
+
+
+TASK_1_OUTPUT_DIR = Path("outputs") / "task_1"
+TASK_1_1_OUTPUT_DIR = TASK_1_OUTPUT_DIR / "task_1_1"
+TASK_1_2_OUTPUT_DIR = TASK_1_OUTPUT_DIR / "task_1_2"
 
 
 def solve_two_price_offering_problem(data, combined):
@@ -35,9 +41,9 @@ def solve_two_price_offering_problem(data, combined):
     auxiliary variables, following the linear formulation used in the lecture
     slides.
 
-    Under the two-price settlement scheme, desired imbalances are settled at
-    the day-ahead price, while undesired imbalances are settled at the
-    balancing price.
+    Under the two-price settlement scheme, system-beneficial imbalances are
+    settled at the day-ahead price, while system-worsening imbalances are
+    settled at the balancing price.
 
     Parameters
     ----------
@@ -66,8 +72,6 @@ def solve_two_price_offering_problem(data, combined):
     model = gp.Model("task_1_2_two_price_linear")
     model.setParam("OutputFlag", 1)
 
-    # First-stage decision:
-    # one hourly day-ahead offer, independent of the realized scenario.
     offer = model.addVars(
         HOURS,
         lb=0.0,
@@ -75,9 +79,6 @@ def solve_two_price_offering_problem(data, combined):
         name="offer",
     )
 
-    # Scenario-dependent imbalance variables.
-    # delta_up = positive wind imbalance / generation excess
-    # delta_down = negative wind imbalance / generation deficit
     delta_up = {}
     delta_down = {}
 
@@ -96,23 +97,21 @@ def solve_two_price_offering_problem(data, combined):
 
     model.update()
 
-    # Imbalance definition:
-    # realized wind - day-ahead offer = positive imbalance - negative imbalance
     for sc in combined.scenarios:
-        w_s, p_s, i_s = sc
+        w_s, _, _ = sc
         wind = data.wind[w_s]
 
         for t in HOURS:
             model.addConstr(
                 delta_up[(sc, t)] - delta_down[(sc, t)]
                 == wind[t] - offer[t],
-                name=f"deviation_balance_{w_s}_{p_s}_{i_s}_{t}",
+                name=f"deviation_balance_{sc}_{t}",
             )
 
     expected_profit_expr = gp.LinExpr()
 
     for sc in combined.scenarios:
-        w_s, p_s, i_s = sc
+        _, p_s, i_s = sc
         probability = combined.probability[sc]
 
         da_price = data.price[p_s]
@@ -126,18 +125,11 @@ def solve_two_price_offering_problem(data, combined):
             bp = balancing_price[t]
             si = system_imbalance[t]
 
-            # Day-ahead revenue
             expected_profit_expr += probability * da * offer[t]
 
             if si == 1:
-                # System deficit:
-                # positive wind imbalance helps the system -> paid at DA price
-                # negative wind imbalance worsens the system -> charged at BP
                 expected_profit_expr += probability * (da * up - bp * down)
             else:
-                # System surplus:
-                # positive wind imbalance worsens the system -> paid at BP
-                # negative wind imbalance helps the system -> charged at DA price
                 expected_profit_expr += probability * (bp * up - da * down)
 
     model.setObjective(expected_profit_expr, GRB.MAXIMIZE)
@@ -155,8 +147,6 @@ def solve_two_price_offering_problem(data, combined):
     offer_solution = np.array([offer[t].X for t in HOURS])
     expected_profit = float(model.ObjVal)
 
-    # Diagnostic: check whether both split imbalance variables are positive.
-    # In the intended linear formulation, this should normally be zero.
     both_active_count = 0
     tolerance = 1e-6
 
@@ -191,9 +181,9 @@ def scenario_profit_two_price(
     Calculate the profit of a fixed offer in one scenario under two-price settlement.
 
     This function is used for ex-post profit evaluation after the optimization
-    has been solved. It applies the same settlement logic as the optimization
-    model, but directly evaluates the realized imbalance instead of using
-    optimization variables.
+    has been solved. It applies the same two-price settlement logic as the
+    optimization model, but directly evaluates the realized imbalance instead
+    of using optimization variables.
 
     Parameters
     ----------
@@ -227,24 +217,17 @@ def scenario_profit_two_price(
         bp = balancing_price[t]
         si = system_imbalance[t]
 
-        # Day-ahead revenue
         total_profit += da * offer[t]
 
         if si == 1:
-            # System deficit
             if delta >= 0:
-                # Positive wind imbalance is desired -> DA price
                 total_profit += da * delta
             else:
-                # Negative wind imbalance is undesired -> balancing price
                 total_profit += bp * delta
         else:
-            # System surplus
             if delta >= 0:
-                # Positive wind imbalance is undesired -> balancing price
                 total_profit += bp * delta
             else:
-                # Negative wind imbalance is desired -> DA price
                 total_profit += da * delta
 
     return float(total_profit)
@@ -329,209 +312,6 @@ def make_common_profit_bins(*profit_arrays, n_bins: int = 35) -> np.ndarray:
     )
 
 
-def plot_profit_distribution_with_bins(
-    profits: np.ndarray,
-    bins: np.ndarray,
-    filename: str,
-    title: str,
-    label: str = "Scenario profit",
-    color: str = "#1f77b4",
-) -> None:
-    """
-    Plot a single profit distribution using predefined histogram bins.
-    """
-
-    import matplotlib.pyplot as plt
-
-    fontsize = 14
-
-    profits = np.asarray(profits, dtype=float)
-    mean_profit = float(np.mean(profits))
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    ax.hist(
-        profits,
-        bins=bins,
-        color=color,
-        alpha=0.75,
-        edgecolor="black",
-        linewidth=0.8,
-        label=label,
-    )
-
-    ax.axvline(
-        mean_profit,
-        color="black",
-        linestyle="--",
-        linewidth=2,
-        label=f"Expected profit: {mean_profit:,.0f} EUR",
-    )
-
-    ax.set_xlabel("Scenario profit [EUR]", fontsize=fontsize)
-    ax.set_ylabel("Frequency", fontsize=fontsize)
-
-    # Keep plot title disabled for report-style figures.
-    # ax.set_title(title, fontsize=fontsize)
-
-    ax.tick_params(axis="both", labelsize=fontsize)
-    ax.xaxis.get_offset_text().set_fontsize(fontsize)
-    ax.yaxis.get_offset_text().set_fontsize(fontsize)
-
-    ax.grid(True, linestyle="--", alpha=0.4)
-    ax.legend(loc="upper left", fontsize=fontsize)
-
-    fig.tight_layout()
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_profit_distribution_comparison(
-    profits_one_price: np.ndarray,
-    profits_two_price: np.ndarray,
-    filename: str,
-    title: str = "Profit Distribution: One-Price vs Two-Price",
-) -> None:
-    """
-    Plot one-price and two-price scenario profit distributions in one figure.
-    """
-
-    import matplotlib.pyplot as plt
-
-    fontsize = 14
-    one_price_color = "#1f77b4"
-    two_price_color = "#ff7f0e"
-
-    profits_one_price = np.asarray(profits_one_price, dtype=float)
-    profits_two_price = np.asarray(profits_two_price, dtype=float)
-
-    mean_one = float(np.mean(profits_one_price))
-    mean_two = float(np.mean(profits_two_price))
-
-    bins = make_common_profit_bins(
-        profits_one_price,
-        profits_two_price,
-        n_bins=35,
-    )
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    ax.hist(
-        profits_one_price,
-        bins=bins,
-        color=one_price_color,
-        alpha=0.40,
-        edgecolor="black",
-        linewidth=0.8,
-        label="One-price",
-    )
-    ax.hist(
-        profits_two_price,
-        bins=bins,
-        color=two_price_color,
-        alpha=0.40,
-        edgecolor="black",
-        linewidth=0.8,
-        label="Two-price",
-    )
-
-    ax.axvline(
-        mean_one,
-        color=one_price_color,
-        linestyle="--",
-        linewidth=2,
-        label=f"Mean one-price: {mean_one:,.0f} EUR",
-    )
-    ax.axvline(
-        mean_two,
-        color=two_price_color,
-        linestyle=":",
-        linewidth=2.5,
-        label=f"Mean two-price: {mean_two:,.0f} EUR",
-    )
-
-    ax.set_xlabel("Scenario profit [EUR]", fontsize=fontsize)
-    ax.set_ylabel("Frequency", fontsize=fontsize)
-
-    # Keep plot title disabled for report-style figures.
-    # ax.set_title(title, fontsize=fontsize)
-
-    ax.tick_params(axis="both", labelsize=fontsize)
-    ax.xaxis.get_offset_text().set_fontsize(fontsize)
-    ax.yaxis.get_offset_text().set_fontsize(fontsize)
-
-    ax.grid(True, linestyle="--", alpha=0.4)
-    ax.legend(loc="upper left", fontsize=fontsize)
-
-    fig.tight_layout()
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_offer_comparison(
-    offer_one_price: np.ndarray,
-    offer_two_price: np.ndarray,
-    filename: str,
-    title: str = "Comparison of Optimal Hourly Offers",
-) -> None:
-    import matplotlib.pyplot as plt
-
-    fontsize = 14
-    one_price_color = "#1f77b4"
-    two_price_color = "#ff7f0e"
-
-    hours = np.arange(24)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    ax.step(
-        hours,
-        offer_one_price,
-        where="mid",
-        marker="o",
-        linewidth=2,
-        color=one_price_color,
-        label="One-price offer",
-    )
-    ax.step(
-        hours,
-        offer_two_price,
-        where="mid",
-        marker="s",
-        linewidth=2,
-        color=two_price_color,
-        label="Two-price offer",
-    )
-    ax.axhline(
-        CAPACITY_MW,
-        color="black",
-        linestyle="--",
-        linewidth=1.2,
-        label=f"Capacity: {CAPACITY_MW:.0f} MW",
-    )
-
-    # Keep plot title disabled for report-style figures.
-    # ax.set_title(title, fontsize=fontsize)
-
-    ax.set_xlabel("Hour", fontsize=fontsize)
-    ax.set_ylabel("Day-ahead offer [MW]", fontsize=fontsize)
-
-    ax.set_xticks(hours)
-    ax.set_xlim(-0.5, 23.5)
-    ax.set_ylim(0, CAPACITY_MW * 1.10)
-
-    ax.tick_params(axis="both", labelsize=fontsize)
-    ax.xaxis.get_offset_text().set_fontsize(fontsize)
-    ax.yaxis.get_offset_text().set_fontsize(fontsize)
-
-    ax.grid(True, linestyle="--", alpha=0.3)
-    ax.legend(loc="best", fontsize=fontsize)
-
-    fig.tight_layout()
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
 def save_task_summary(
     expected_profit: float,
     evaluated_mean_profit: float,
@@ -539,7 +319,7 @@ def save_task_summary(
     evaluated_max_profit: float,
     evaluated_std_profit: float,
     model_stats: dict,
-    filename: str,
+    filename: str | Path,
 ) -> None:
     """
     Save a compact numerical summary of Task 1.2 results.
@@ -569,7 +349,7 @@ def save_task_summary(
     model_stats : dict
         Dictionary containing model statistics and diagnostic values.
 
-    filename : str
+    filename : str | Path
         Path where the summary CSV file should be saved.
 
     Returns
@@ -598,7 +378,7 @@ def save_task_summary(
 def save_profit_comparison(
     profits_one_price: np.ndarray,
     profits_two_price: np.ndarray,
-    filename: str,
+    filename: str | Path,
 ) -> None:
     """
     Save a compact comparison of one-price and two-price profit statistics.
@@ -611,7 +391,7 @@ def save_profit_comparison(
     profits_two_price : np.ndarray
         Scenario profits under the two-price scheme [EUR].
 
-    filename : str
+    filename : str | Path
         Path where the comparison CSV file should be saved.
 
     Returns
@@ -642,7 +422,7 @@ def save_profit_comparison(
     comparison_df.to_csv(filename, index=False)
 
 
-def main():
+def main() -> None:
     """
     Run the complete Task 1.2 workflow.
 
@@ -650,17 +430,21 @@ def main():
     offering problem, evaluates the optimal offer across all scenarios, saves
     result tables, and creates the figures needed for the report.
 
+    All outputs are saved in:
+
+        outputs/task_1/task_1_2/
+
     Returns
     -------
     None
-        The function writes outputs to the ``outputs`` and ``data/processed``
-        folders and prints a compact summary to the terminal.
+        The function writes output files and prints a compact summary to the
+        terminal.
     """
 
-    ensure_output_folders()
+    TASK_1_2_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    wind_file = "Data/scen_zone2.csv"
-    price_file = "Data/DayAheadPrices.csv"
+    wind_file = "data/scen_zone2.csv"
+    price_file = "data/DayAheadPrices.csv"
 
     data, combined = prepare_scenario_data(
         wind_scenario_file=wind_file,
@@ -720,13 +504,42 @@ def main():
         f"{model_stats['both_delta_variables_active_count']}"
     )
 
+    offer_file = TASK_1_2_OUTPUT_DIR / "task_1_2_offer.csv"
+    model_stats_file = TASK_1_2_OUTPUT_DIR / "task_1_2_model_stats.csv"
+    summary_file = TASK_1_2_OUTPUT_DIR / "task_1_2_summary.csv"
+    wind_scenarios_file = TASK_1_2_OUTPUT_DIR / "task_1_2_wind_scenarios_used.csv"
+    scenario_profit_file = TASK_1_2_OUTPUT_DIR / "task_1_2_scenario_profits.csv"
+
+    profit_distribution_plot_file = (
+        TASK_1_2_OUTPUT_DIR / "task_1_2_profit_distribution.png"
+    )
+    offer_comparison_plot_file = (
+        TASK_1_2_OUTPUT_DIR / "task_1_1_vs_1_2_offer_comparison.png"
+    )
+    profit_comparison_plot_file = (
+        TASK_1_2_OUTPUT_DIR / "task_1_1_vs_1_2_profit_distribution_comparison.png"
+    )
+    offer_comparison_file = (
+        TASK_1_2_OUTPUT_DIR / "task_1_1_vs_1_2_offer_comparison.csv"
+    )
+    profit_comparison_file = (
+        TASK_1_2_OUTPUT_DIR / "task_1_1_vs_1_2_profit_comparison.csv"
+    )
+
+    scenario_profit_df = pd.DataFrame(
+        {
+            "scenario": np.arange(len(profits_two)),
+            "profit_eur": profits_two,
+        }
+    )
+
     save_offer_to_csv(
         offer=offer,
-        filename="outputs/tables/task_1_2_offer.csv",
+        filename=str(offer_file),
     )
 
     pd.DataFrame([model_stats]).to_csv(
-        "outputs/tables/task_1_2_model_stats.csv",
+        model_stats_file,
         index=False,
     )
 
@@ -737,27 +550,25 @@ def main():
         evaluated_max_profit=evaluated_max_profit,
         evaluated_std_profit=evaluated_std_profit,
         model_stats=model_stats,
-        filename="outputs/tables/task_1_2_summary.csv",
+        filename=summary_file,
     )
+
+    scenario_profit_df.to_csv(scenario_profit_file, index=False)
 
     save_wind_scenarios_to_csv(
         wind_scenarios=data.wind,
-        filename="data/processed/wind_scenarios_used.csv",
+        filename=str(wind_scenarios_file),
     )
 
-    plot_hourly_offer(
-        offer=offer,
-        filename="outputs/figures/task_1_2_hourly_offer.png",
-        title="Task 1.2 Optimal Hourly Offer - Two-Price Scheme",
-    )
+    one_price_offer_file = TASK_1_1_OUTPUT_DIR / "task_1_1_offer.csv"
 
-    plot_profit_by_scenario(
-        profits=profits_two,
-        filename="outputs/figures/task_1_2_profit_by_scenario.png",
-        title="Task 1.2 Profit Across Scenarios - Two-Price Scheme",
-    )
-
-    one_price_offer_file = "outputs/tables/task_1_1_offer.csv"
+    generated_files = [
+        offer_file,
+        model_stats_file,
+        summary_file,
+        scenario_profit_file,
+        wind_scenarios_file,
+    ]
 
     try:
         one_price_df = pd.read_csv(one_price_offer_file)
@@ -771,8 +582,6 @@ def main():
             )
         )
 
-        # Common bins make the standalone two-price histogram and the
-        # comparison histogram consistent.
         common_bins = make_common_profit_bins(
             profits_one,
             profits_two,
@@ -782,45 +591,53 @@ def main():
         plot_profit_distribution_with_bins(
             profits=profits_two,
             bins=common_bins,
-            filename="outputs/figures/task_1_2_profit_distribution.png",
+            filename=str(profit_distribution_plot_file),
             title="Task 1.2 Profit Distribution - Two-Price Scheme",
             label="Two-price scenario profit",
+            color="#ff7f0e",
         )
 
         plot_offer_comparison(
             offer_one_price=offer_one,
             offer_two_price=offer,
-            filename="outputs/figures/task_1_1_vs_1_2_offer_comparison.png",
+            filename=str(offer_comparison_plot_file),
             title="Optimal Hourly Offers: One-Price vs Two-Price",
         )
 
-        comparison_df = pd.DataFrame(
+        offer_comparison_df = pd.DataFrame(
             {
                 "hour": HOURS,
-                "one_price_offer_MW": offer_one,
-                "two_price_offer_MW": offer,
-                "difference_two_minus_one_MW": offer - offer_one,
+                "one_price_offer_mw": offer_one,
+                "two_price_offer_mw": offer,
+                "difference_two_minus_one_mw": offer - offer_one,
             }
         )
-        comparison_df.to_csv(
-            "outputs/tables/task_1_1_vs_1_2_offer_comparison.csv",
+        offer_comparison_df.to_csv(
+            offer_comparison_file,
             index=False,
         )
 
         plot_profit_distribution_comparison(
             profits_one_price=profits_one,
             profits_two_price=profits_two,
-            filename=(
-                "outputs/figures/"
-                "task_1_1_vs_1_2_profit_distribution_comparison.png"
-            ),
+            filename=str(profit_comparison_plot_file),
             title="Profit Distribution: One-Price vs Two-Price",
         )
 
         save_profit_comparison(
             profits_one_price=profits_one,
             profits_two_price=profits_two,
-            filename="outputs/tables/task_1_1_vs_1_2_profit_comparison.csv",
+            filename=profit_comparison_file,
+        )
+
+        generated_files.extend(
+            [
+                profit_distribution_plot_file,
+                offer_comparison_plot_file,
+                profit_comparison_plot_file,
+                offer_comparison_file,
+                profit_comparison_file,
+            ]
         )
 
     except FileNotFoundError:
@@ -829,33 +646,25 @@ def main():
             "Skipping one-price vs two-price comparison plots."
         )
 
-        # If Task 1.1 output is missing, still produce the standalone
-        # two-price histogram using bins based only on two-price profits.
         two_only_bins = make_common_profit_bins(
             profits_two,
             n_bins=35,
         )
+
         plot_profit_distribution_with_bins(
             profits=profits_two,
             bins=two_only_bins,
-            filename="outputs/figures/task_1_2_profit_distribution.png",
+            filename=str(profit_distribution_plot_file),
             title="Task 1.2 Profit Distribution - Two-Price Scheme",
             label="Two-price scenario profit",
+            color="#ff7f0e",
         )
 
+        generated_files.append(profit_distribution_plot_file)
+
     print("\nFiles saved:")
-    print(" - outputs/tables/task_1_2_offer.csv")
-    print(" - outputs/tables/task_1_2_model_stats.csv")
-    print(" - outputs/tables/task_1_2_summary.csv")
-    print(" - outputs/tables/task_1_1_vs_1_2_offer_comparison.csv")
-    print(" - outputs/tables/task_1_1_vs_1_2_profit_comparison.csv")
-    print(" - outputs/figures/task_1_2_hourly_offer.png")
-    print(" - outputs/figures/task_1_2_profit_distribution.png")
-    print(" - outputs/figures/task_1_2_profit_by_scenario.png")
-    print(" - outputs/figures/task_1_1_vs_1_2_offer_comparison.png")
-    print(" - outputs/figures/task_1_1_vs_1_2_profit_distribution_comparison.png")
-    print(" - data/processed/price_hourly_daily.csv")
-    print(" - data/processed/wind_scenarios_used.csv")
+    for file in generated_files:
+        print(f" - {file}")
 
     if model_stats["both_delta_variables_active_count"] > 0:
         print(

@@ -2,74 +2,125 @@
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from helpers import (
     HOURS,
     CAPACITY_MW,
-    ensure_output_folders,
     prepare_scenario_data,
 )
+
+
+SCENARIO_ANALYSIS_OUTPUT_DIR = Path("outputs") / "scenario_analysis"
+SCENARIO_ANALYSIS_FIGURE_DIR = SCENARIO_ANALYSIS_OUTPUT_DIR / "figures"
+SCENARIO_ANALYSIS_TABLE_DIR = SCENARIO_ANALYSIS_OUTPUT_DIR / "tables"
 
 
 # ============================================================
 # General helpers
 # ============================================================
-def save_summary_statistics(values, filename, label):
+
+def save_summary_statistics(
+    values,
+    filename: str | Path,
+    label: str,
+):
     """
-    Saves descriptive statistics for a 2D array:
-        rows = scenarios
-        columns = hours
+    Save descriptive statistics for a 2D array.
+
+    Rows represent scenarios and columns represent hours.
+
+    Parameters
+    ----------
+    values : array-like
+        Scenario matrix with shape ``n_scenarios x 24``.
+
+    filename : str | Path
+        Base filename for the output CSV files. The function writes one
+        hourly and one overall statistics file.
+
+    label : str
+        Variable name used in the overall statistics table.
+
+    Returns
+    -------
+    hourly_stats : pd.DataFrame
+        Hourly summary statistics.
+
+    overall_stats : pd.DataFrame
+        Summary statistics across all scenario-hour values.
     """
 
     values = np.asarray(values)
+    filename = Path(filename)
 
-    hourly_stats = pd.DataFrame({
-        "hour": HOURS,
-        "mean": np.mean(values, axis=0),
-        "std": np.std(values, axis=0),
-        "min": np.min(values, axis=0),
-        "p05": np.quantile(values, 0.05, axis=0),
-        "p10": np.quantile(values, 0.10, axis=0),
-        "p25": np.quantile(values, 0.25, axis=0),
-        "p50": np.quantile(values, 0.50, axis=0),
-        "p75": np.quantile(values, 0.75, axis=0),
-        "p90": np.quantile(values, 0.90, axis=0),
-        "p95": np.quantile(values, 0.95, axis=0),
-        "max": np.max(values, axis=0),
-    })
+    hourly_stats = pd.DataFrame(
+        {
+            "hour": HOURS,
+            "mean": np.mean(values, axis=0),
+            "std": np.std(values, axis=0),
+            "min": np.min(values, axis=0),
+            "p05": np.quantile(values, 0.05, axis=0),
+            "p10": np.quantile(values, 0.10, axis=0),
+            "p25": np.quantile(values, 0.25, axis=0),
+            "p50": np.quantile(values, 0.50, axis=0),
+            "p75": np.quantile(values, 0.75, axis=0),
+            "p90": np.quantile(values, 0.90, axis=0),
+            "p95": np.quantile(values, 0.95, axis=0),
+            "max": np.max(values, axis=0),
+        }
+    )
 
     all_values = values.flatten()
 
-    overall_stats = pd.DataFrame([{
-        "variable": label,
-        "mean": np.mean(all_values),
-        "std": np.std(all_values),
-        "min": np.min(all_values),
-        "p05": np.quantile(all_values, 0.05),
-        "p10": np.quantile(all_values, 0.10),
-        "p25": np.quantile(all_values, 0.25),
-        "p50": np.quantile(all_values, 0.50),
-        "p75": np.quantile(all_values, 0.75),
-        "p90": np.quantile(all_values, 0.90),
-        "p95": np.quantile(all_values, 0.95),
-        "max": np.max(all_values),
-    }])
+    overall_stats = pd.DataFrame(
+        [
+            {
+                "variable": label,
+                "mean": np.mean(all_values),
+                "std": np.std(all_values),
+                "min": np.min(all_values),
+                "p05": np.quantile(all_values, 0.05),
+                "p10": np.quantile(all_values, 0.10),
+                "p25": np.quantile(all_values, 0.25),
+                "p50": np.quantile(all_values, 0.50),
+                "p75": np.quantile(all_values, 0.75),
+                "p90": np.quantile(all_values, 0.90),
+                "p95": np.quantile(all_values, 0.95),
+                "max": np.max(all_values),
+            }
+        ]
+    )
 
-    hourly_stats.to_csv(filename.replace(".csv", "_hourly.csv"), index=False)
-    overall_stats.to_csv(filename.replace(".csv", "_overall.csv"), index=False)
+    hourly_file = filename.with_name(filename.stem + "_hourly.csv")
+    overall_file = filename.with_name(filename.stem + "_overall.csv")
+
+    hourly_stats.to_csv(hourly_file, index=False)
+    overall_stats.to_csv(overall_file, index=False)
 
     return hourly_stats, overall_stats
 
 
 def dict_to_matrix(scenario_dict):
     """
-    Converts dictionary {scenario_id: 24-hour array}
-    into matrix with shape:
-        n_scenarios x 24
+    Convert a scenario dictionary into a matrix.
+
+    Parameters
+    ----------
+    scenario_dict : dict
+        Dictionary of the form ``{scenario_id: 24-hour array}``.
+
+    Returns
+    -------
+    scenario_ids : list
+        Sorted scenario IDs.
+
+    matrix : np.ndarray
+        Matrix with shape ``n_scenarios x 24``.
     """
 
     scenario_ids = sorted(scenario_dict.keys())
@@ -81,9 +132,34 @@ def dict_to_matrix(scenario_dict):
 # ============================================================
 # Plot helpers
 # ============================================================
-def plot_all_scenarios(matrix, filename, title, ylabel):
+
+def plot_all_scenarios(
+    matrix,
+    filename: str | Path,
+    title: str,
+    ylabel: str,
+) -> None:
     """
-    Plots all scenarios as 24-hour trajectories.
+    Plot all scenarios as 24-hour trajectories.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Scenario matrix with shape ``n_scenarios x 24``.
+
+    filename : str | Path
+        Path where the figure should be saved.
+
+    title : str
+        Plot title.
+
+    ylabel : str
+        Y-axis label.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
     """
 
     hours = np.array(HOURS)
@@ -103,9 +179,33 @@ def plot_all_scenarios(matrix, filename, title, ylabel):
     plt.close()
 
 
-def plot_mean_with_quantiles(matrix, filename, title, ylabel):
+def plot_mean_with_quantiles(
+    matrix,
+    filename: str | Path,
+    title: str,
+    ylabel: str,
+) -> None:
     """
-    Plots mean, median and quantile bands.
+    Plot mean, median and quantile bands.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Scenario matrix with shape ``n_scenarios x 24``.
+
+    filename : str | Path
+        Path where the figure should be saved.
+
+    title : str
+        Plot title.
+
+    ylabel : str
+        Y-axis label.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
     """
 
     hours = np.array(HOURS)
@@ -135,15 +235,44 @@ def plot_mean_with_quantiles(matrix, filename, title, ylabel):
     plt.close()
 
 
-def plot_distribution(values, filename, title, xlabel, bins=35):
+def plot_distribution(
+    values,
+    filename: str | Path,
+    title: str,
+    xlabel: str,
+    bins: int = 35,
+) -> None:
     """
-    Plots distribution of all hourly values across all scenarios.
+    Plot the distribution of all hourly values across all scenarios.
+
+    Parameters
+    ----------
+    values : array-like
+        Scenario values.
+
+    filename : str | Path
+        Path where the figure should be saved.
+
+    title : str
+        Plot title.
+
+    xlabel : str
+        X-axis label.
+
+    bins : int, default 35
+        Number of histogram bins.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
     """
 
     values = np.asarray(values).flatten()
 
     plt.figure(figsize=(8, 5))
     plt.hist(values, bins=bins, edgecolor="black", alpha=0.8)
+
     plt.axvline(
         np.mean(values),
         linestyle="--",
@@ -167,9 +296,33 @@ def plot_distribution(values, filename, title, xlabel, bins=35):
     plt.close()
 
 
-def plot_boxplot_by_hour(matrix, filename, title, ylabel):
+def plot_boxplot_by_hour(
+    matrix,
+    filename: str | Path,
+    title: str,
+    ylabel: str,
+) -> None:
     """
-    Boxplot for scenario values by hour.
+    Plot a boxplot of scenario values by hour.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Scenario matrix with shape ``n_scenarios x 24``.
+
+    filename : str | Path
+        Path where the figure should be saved.
+
+    title : str
+        Plot title.
+
+    ylabel : str
+        Y-axis label.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
     """
 
     plt.figure(figsize=(11, 6))
@@ -188,10 +341,27 @@ def plot_boxplot_by_hour(matrix, filename, title, ylabel):
     plt.close()
 
 
-def plot_imbalance_heatmap(imbalance_matrix, filename):
+def plot_imbalance_heatmap(
+    imbalance_matrix,
+    filename: str | Path,
+) -> None:
     """
-    Plots binary imbalance scenarios.
-    SI = 1 deficit, SI = 0 surplus.
+    Plot binary system imbalance scenarios.
+
+    ``SI = 1`` denotes deficit and ``SI = 0`` denotes surplus.
+
+    Parameters
+    ----------
+    imbalance_matrix : array-like
+        Matrix of imbalance scenarios.
+
+    filename : str | Path
+        Path where the figure should be saved.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
     """
 
     plt.figure(figsize=(10, 4))
@@ -208,10 +378,29 @@ def plot_imbalance_heatmap(imbalance_matrix, filename):
     plt.close()
 
 
-def plot_correlation_heatmap(matrix, filename, title):
+def plot_correlation_heatmap(
+    matrix,
+    filename: str | Path,
+    title: str,
+) -> None:
     """
-    Hour-to-hour correlation heatmap.
-    Useful for checking whether the scenarios preserve daily structure.
+    Plot an hour-to-hour correlation heatmap.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Scenario matrix with shape ``n_scenarios x 24``.
+
+    filename : str | Path
+        Path where the figure should be saved.
+
+    title : str
+        Plot title.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
     """
 
     corr = np.corrcoef(matrix.T)
@@ -232,10 +421,25 @@ def plot_correlation_heatmap(matrix, filename, title):
 # ============================================================
 # Combined scenario analysis
 # ============================================================
-def build_combined_scenario_dataframe(data, combined):
+
+def build_combined_scenario_dataframe(data, combined) -> pd.DataFrame:
     """
-    Creates a long dataframe for all combined scenarios.
-    One row per combined scenario and hour.
+    Build a long DataFrame for all combined scenarios.
+
+    The returned DataFrame contains one row per combined scenario and hour.
+
+    Parameters
+    ----------
+    data : ScenarioData
+        Scenario data containing wind, price, imbalance and balancing prices.
+
+    combined : CombinedScenarioSet
+        Combined scenario set.
+
+    Returns
+    -------
+    pd.DataFrame
+        Long DataFrame of all combined scenario-hour combinations.
     """
 
     rows = []
@@ -249,45 +453,77 @@ def build_combined_scenario_dataframe(data, combined):
         balancing_price = data.balancing_price[(p_s, i_s)]
 
         for t in HOURS:
-            rows.append({
-                "combined_scenario": scenario_index,
-                "wind_scenario": w_s,
-                "price_scenario": p_s,
-                "imbalance_scenario": i_s,
-                "hour": t,
-                "wind_MW": wind[t],
-                "day_ahead_price_EUR_per_MWh": price[t],
-                "system_imbalance": imbalance[t],
-                "balancing_price_EUR_per_MWh": balancing_price[t],
-                "probability": combined.probability[sc],
-            })
+            rows.append(
+                {
+                    "combined_scenario": scenario_index,
+                    "wind_scenario": w_s,
+                    "price_scenario": p_s,
+                    "imbalance_scenario": i_s,
+                    "hour": t,
+                    "wind_mw": wind[t],
+                    "day_ahead_price_eur_per_mwh": price[t],
+                    "system_imbalance": imbalance[t],
+                    "balancing_price_eur_per_mwh": balancing_price[t],
+                    "probability": combined.probability[sc],
+                }
+            )
 
     return pd.DataFrame(rows)
 
 
-def summarize_combined_scenarios(combined_df):
+def summarize_combined_scenarios(combined_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Saves simple checks for the combined scenario set.
+    Build summary checks for the combined scenario set.
+
+    Parameters
+    ----------
+    combined_df : pd.DataFrame
+        Long combined scenario DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        One-row summary table for the combined scenario set.
     """
 
-    summary = pd.DataFrame([{
-        "number_of_combined_hourly_rows": len(combined_df),
-        "number_of_combined_scenarios": combined_df["combined_scenario"].nunique(),
-        "number_of_wind_scenarios": combined_df["wind_scenario"].nunique(),
-        "number_of_price_scenarios": combined_df["price_scenario"].nunique(),
-        "number_of_imbalance_scenarios": combined_df["imbalance_scenario"].nunique(),
-        "probability_per_combined_scenario": combined_df["probability"].iloc[0],
-        "sum_probabilities": (
-            combined_df
-            .drop_duplicates("combined_scenario")["probability"]
-            .sum()
-        ),
-        "average_deficit_share": combined_df["system_imbalance"].mean(),
-        "average_surplus_share": 1.0 - combined_df["system_imbalance"].mean(),
-        "mean_wind_MW": combined_df["wind_MW"].mean(),
-        "mean_day_ahead_price": combined_df["day_ahead_price_EUR_per_MWh"].mean(),
-        "mean_balancing_price": combined_df["balancing_price_EUR_per_MWh"].mean(),
-    }])
+    summary = pd.DataFrame(
+        [
+            {
+                "number_of_combined_hourly_rows": len(combined_df),
+                "number_of_combined_scenarios": combined_df[
+                    "combined_scenario"
+                ].nunique(),
+                "number_of_wind_scenarios": combined_df[
+                    "wind_scenario"
+                ].nunique(),
+                "number_of_price_scenarios": combined_df[
+                    "price_scenario"
+                ].nunique(),
+                "number_of_imbalance_scenarios": combined_df[
+                    "imbalance_scenario"
+                ].nunique(),
+                "probability_per_combined_scenario": combined_df[
+                    "probability"
+                ].iloc[0],
+                "sum_probabilities": (
+                    combined_df.drop_duplicates("combined_scenario")[
+                        "probability"
+                    ].sum()
+                ),
+                "average_deficit_share": combined_df["system_imbalance"].mean(),
+                "average_surplus_share": (
+                    1.0 - combined_df["system_imbalance"].mean()
+                ),
+                "mean_wind_mw": combined_df["wind_mw"].mean(),
+                "mean_day_ahead_price_eur_per_mwh": combined_df[
+                    "day_ahead_price_eur_per_mwh"
+                ].mean(),
+                "mean_balancing_price_eur_per_mwh": combined_df[
+                    "balancing_price_eur_per_mwh"
+                ].mean(),
+            }
+        ]
+    )
 
     return summary
 
@@ -295,17 +531,34 @@ def summarize_combined_scenarios(combined_df):
 # ============================================================
 # Main script
 # ============================================================
-def main():
-    ensure_output_folders()
 
-    fig_dir = "outputs/figures/scenario_analysis"
-    table_dir = "outputs/tables/scenario_analysis"
+def main() -> None:
+    """
+    Run the complete scenario analysis workflow.
 
-    os.makedirs(fig_dir, exist_ok=True)
-    os.makedirs(table_dir, exist_ok=True)
+    The script creates summary tables and diagnostic figures for wind,
+    day-ahead price, system imbalance, balancing price, and combined scenario
+    data.
 
-    wind_file = "Data/scen_zone2.csv"
-    price_file = "Data/DayAheadPrices.csv"
+    All outputs are saved in:
+
+        outputs/scenario_analysis/
+
+    Returns
+    -------
+    None
+        The function writes tables and figures and prints a compact summary to
+        the terminal.
+    """
+
+    SCENARIO_ANALYSIS_FIGURE_DIR.mkdir(parents=True, exist_ok=True)
+    SCENARIO_ANALYSIS_TABLE_DIR.mkdir(parents=True, exist_ok=True)
+
+    fig_dir = SCENARIO_ANALYSIS_FIGURE_DIR
+    table_dir = SCENARIO_ANALYSIS_TABLE_DIR
+
+    wind_file = "data/scen_zone2.csv"
+    price_file = "data/DayAheadPrices.csv"
 
     data, combined = prepare_scenario_data(
         wind_scenario_file=wind_file,
@@ -331,9 +584,9 @@ def main():
     price_ids, price_matrix = dict_to_matrix(data.price)
     imbalance_ids, imbalance_matrix = dict_to_matrix(data.imbalance)
 
-    balancing_matrix = np.vstack([
-        values for _, values in sorted(data.balancing_price.items())
-    ])
+    balancing_matrix = np.vstack(
+        [values for _, values in sorted(data.balancing_price.items())]
+    )
 
     # --------------------------------------------------------
     # Save raw scenario matrices
@@ -342,64 +595,73 @@ def main():
         wind_matrix,
         index=[f"wind_{i}" for i in wind_ids],
         columns=[f"h{h:02d}" for h in HOURS],
-    ).to_csv(f"{table_dir}/scenario_analysis_wind_matrix.csv")
+    ).to_csv(table_dir / "scenario_analysis_wind_matrix.csv")
 
     pd.DataFrame(
         price_matrix,
         index=[f"price_{i}" for i in price_ids],
         columns=[f"h{h:02d}" for h in HOURS],
-    ).to_csv(f"{table_dir}/scenario_analysis_price_matrix.csv")
+    ).to_csv(table_dir / "scenario_analysis_price_matrix.csv")
 
     pd.DataFrame(
         imbalance_matrix,
         index=[f"imbalance_{i}" for i in imbalance_ids],
         columns=[f"h{h:02d}" for h in HOURS],
-    ).to_csv(f"{table_dir}/scenario_analysis_imbalance_matrix.csv")
+    ).to_csv(table_dir / "scenario_analysis_imbalance_matrix.csv")
 
     pd.DataFrame(
         balancing_matrix,
         columns=[f"h{h:02d}" for h in HOURS],
-    ).to_csv(f"{table_dir}/scenario_analysis_balancing_price_matrix.csv", index=False)
+    ).to_csv(
+        table_dir / "scenario_analysis_balancing_price_matrix.csv",
+        index=False,
+    )
 
     # --------------------------------------------------------
     # Save statistics
     # --------------------------------------------------------
     wind_hourly_stats, wind_overall_stats = save_summary_statistics(
         wind_matrix,
-        f"{table_dir}/scenario_analysis_wind_stats.csv",
-        label="wind_MW",
+        table_dir / "scenario_analysis_wind_stats.csv",
+        label="wind_mw",
     )
 
     price_hourly_stats, price_overall_stats = save_summary_statistics(
         price_matrix,
-        f"{table_dir}/scenario_analysis_price_stats.csv",
-        label="day_ahead_price_EUR_per_MWh",
+        table_dir / "scenario_analysis_price_stats.csv",
+        label="day_ahead_price_eur_per_mwh",
     )
 
     balancing_hourly_stats, balancing_overall_stats = save_summary_statistics(
         balancing_matrix,
-        f"{table_dir}/scenario_analysis_balancing_price_stats.csv",
-        label="balancing_price_EUR_per_MWh",
+        table_dir / "scenario_analysis_balancing_price_stats.csv",
+        label="balancing_price_eur_per_mwh",
     )
 
-    imbalance_hourly_stats = pd.DataFrame({
-        "hour": HOURS,
-        "deficit_probability": np.mean(imbalance_matrix, axis=0),
-        "surplus_probability": 1.0 - np.mean(imbalance_matrix, axis=0),
-    })
+    imbalance_hourly_stats = pd.DataFrame(
+        {
+            "hour": HOURS,
+            "deficit_probability": np.mean(imbalance_matrix, axis=0),
+            "surplus_probability": 1.0 - np.mean(imbalance_matrix, axis=0),
+        }
+    )
 
-    imbalance_overall_stats = pd.DataFrame([{
-        "average_deficit_probability": np.mean(imbalance_matrix),
-        "average_surplus_probability": 1.0 - np.mean(imbalance_matrix),
-    }])
+    imbalance_overall_stats = pd.DataFrame(
+        [
+            {
+                "average_deficit_probability": np.mean(imbalance_matrix),
+                "average_surplus_probability": 1.0 - np.mean(imbalance_matrix),
+            }
+        ]
+    )
 
     imbalance_hourly_stats.to_csv(
-        f"{table_dir}/scenario_analysis_imbalance_hourly_stats.csv",
+        table_dir / "scenario_analysis_imbalance_hourly_stats.csv",
         index=False,
     )
 
     imbalance_overall_stats.to_csv(
-        f"{table_dir}/scenario_analysis_imbalance_overall_stats.csv",
+        table_dir / "scenario_analysis_imbalance_overall_stats.csv",
         index=False,
     )
 
@@ -409,14 +671,14 @@ def main():
     combined_df = build_combined_scenario_dataframe(data, combined)
 
     combined_df.to_csv(
-        f"{table_dir}/scenario_analysis_combined_scenarios_long.csv",
+        table_dir / "scenario_analysis_combined_scenarios_long.csv",
         index=False,
     )
 
     combined_summary = summarize_combined_scenarios(combined_df)
 
     combined_summary.to_csv(
-        f"{table_dir}/scenario_analysis_combined_summary.csv",
+        table_dir / "scenario_analysis_combined_summary.csv",
         index=False,
     )
 
@@ -425,35 +687,35 @@ def main():
     # --------------------------------------------------------
     plot_all_scenarios(
         wind_matrix,
-        f"{fig_dir}/scenario_analysis_wind_all_scenarios.png",
+        fig_dir / "scenario_analysis_wind_all_scenarios.png",
         "Wind Production Scenarios",
         "Wind production [MW]",
     )
 
     plot_mean_with_quantiles(
         wind_matrix,
-        f"{fig_dir}/scenario_analysis_wind_mean_quantiles.png",
+        fig_dir / "scenario_analysis_wind_mean_quantiles.png",
         "Wind Production Scenario Envelope",
         "Wind production [MW]",
     )
 
     plot_distribution(
         wind_matrix,
-        f"{fig_dir}/scenario_analysis_wind_distribution.png",
+        fig_dir / "scenario_analysis_wind_distribution.png",
         "Distribution of Wind Production Values",
         "Wind production [MW]",
     )
 
     plot_boxplot_by_hour(
         wind_matrix,
-        f"{fig_dir}/scenario_analysis_wind_boxplot_by_hour.png",
+        fig_dir / "scenario_analysis_wind_boxplot_by_hour.png",
         "Wind Production Distribution by Hour",
         "Wind production [MW]",
     )
 
     plot_correlation_heatmap(
         wind_matrix,
-        f"{fig_dir}/scenario_analysis_wind_hourly_correlation.png",
+        fig_dir / "scenario_analysis_wind_hourly_correlation.png",
         "Wind Production Hour-to-Hour Correlation",
     )
 
@@ -462,35 +724,35 @@ def main():
     # --------------------------------------------------------
     plot_all_scenarios(
         price_matrix,
-        f"{fig_dir}/scenario_analysis_price_all_scenarios.png",
+        fig_dir / "scenario_analysis_price_all_scenarios.png",
         "Day-Ahead Price Scenarios",
         "Day-ahead price [EUR/MWh]",
     )
 
     plot_mean_with_quantiles(
         price_matrix,
-        f"{fig_dir}/scenario_analysis_price_mean_quantiles.png",
+        fig_dir / "scenario_analysis_price_mean_quantiles.png",
         "Day-Ahead Price Scenario Envelope",
         "Day-ahead price [EUR/MWh]",
     )
 
     plot_distribution(
         price_matrix,
-        f"{fig_dir}/scenario_analysis_price_distribution.png",
+        fig_dir / "scenario_analysis_price_distribution.png",
         "Distribution of Day-Ahead Price Values",
         "Day-ahead price [EUR/MWh]",
     )
 
     plot_boxplot_by_hour(
         price_matrix,
-        f"{fig_dir}/scenario_analysis_price_boxplot_by_hour.png",
+        fig_dir / "scenario_analysis_price_boxplot_by_hour.png",
         "Day-Ahead Price Distribution by Hour",
         "Day-ahead price [EUR/MWh]",
     )
 
     plot_correlation_heatmap(
         price_matrix,
-        f"{fig_dir}/scenario_analysis_price_hourly_correlation.png",
+        fig_dir / "scenario_analysis_price_hourly_correlation.png",
         "Day-Ahead Price Hour-to-Hour Correlation",
     )
 
@@ -499,12 +761,12 @@ def main():
     # --------------------------------------------------------
     plot_imbalance_heatmap(
         imbalance_matrix,
-        f"{fig_dir}/scenario_analysis_imbalance_heatmap.png",
+        fig_dir / "scenario_analysis_imbalance_heatmap.png",
     )
 
     plot_distribution(
         imbalance_matrix,
-        f"{fig_dir}/scenario_analysis_imbalance_distribution.png",
+        fig_dir / "scenario_analysis_imbalance_distribution.png",
         "Distribution of System Imbalance States",
         "System imbalance, 1 = deficit, 0 = surplus",
         bins=2,
@@ -515,28 +777,28 @@ def main():
     # --------------------------------------------------------
     plot_all_scenarios(
         balancing_matrix,
-        f"{fig_dir}/scenario_analysis_balancing_price_all_scenarios.png",
+        fig_dir / "scenario_analysis_balancing_price_all_scenarios.png",
         "Balancing Price Scenarios",
         "Balancing price [EUR/MWh]",
     )
 
     plot_mean_with_quantiles(
         balancing_matrix,
-        f"{fig_dir}/scenario_analysis_balancing_price_mean_quantiles.png",
+        fig_dir / "scenario_analysis_balancing_price_mean_quantiles.png",
         "Balancing Price Scenario Envelope",
         "Balancing price [EUR/MWh]",
     )
 
     plot_distribution(
         balancing_matrix,
-        f"{fig_dir}/scenario_analysis_balancing_price_distribution.png",
+        fig_dir / "scenario_analysis_balancing_price_distribution.png",
         "Distribution of Balancing Price Values",
         "Balancing price [EUR/MWh]",
     )
 
     plot_boxplot_by_hour(
         balancing_matrix,
-        f"{fig_dir}/scenario_analysis_balancing_price_boxplot_by_hour.png",
+        fig_dir / "scenario_analysis_balancing_price_boxplot_by_hour.png",
         "Balancing Price Distribution by Hour",
         "Balancing price [EUR/MWh]",
     )
