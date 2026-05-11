@@ -1,2 +1,2 @@
 model,variables,constraints,solve_time_s,objective_value_eur,both_delta_variables_active_count
-Task 1.2 two-price,76824,38400,0.33960379200289026,916868.8483645812,160
+Task 1.2 two-price,76824,38400,0.4705509530031122,916868.8483645812,160

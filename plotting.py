@@ -1035,3 +1035,554 @@ def plot_profit_cdf_by_beta(
     fig.tight_layout()
     fig.savefig(filename, dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+
+# ============================================================
+# Task 2 colors
+# ============================================================
+
+RESERVE_COLOR = "#1f77b4"
+SHORTFALL_COLOR = "#ff7f0e"
+REQUIREMENT_COLOR = "black"
+
+
+# ============================================================
+# Task 2.1
+# Plot load profiles
+# ============================================================
+
+def plot_load_profiles(
+    load_profiles: np.ndarray,
+    filename: str,
+    title: str | None = None,
+) -> None:
+    """
+    Plot all load profiles over the delivery period.
+
+    Parameters
+    ----------
+    load_profiles : np.ndarray
+        Load profiles with shape ``n_profiles x n_minutes`` [kW].
+
+    filename : str
+        Path where the figure should be saved.
+
+    title : str | None, default None
+        Kept for compatibility, but not used for report-style figures.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    apply_report_style()
+
+    load_profiles = np.asarray(load_profiles, dtype=float)
+    minutes = np.arange(load_profiles.shape[1])
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    for profile in load_profiles:
+        ax.plot(
+            minutes,
+            profile,
+            linewidth=0.8,
+            alpha=0.45,
+            color=RESERVE_COLOR,
+        )
+
+    ax.set_xlabel("Minute")
+    ax.set_ylabel("Load consumption [kW]")
+    ax.set_xlim(minutes[0], minutes[-1])
+    ax.grid(True, linestyle="--", alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ============================================================
+# Task 2.1
+# Reserve availability envelope
+# ============================================================
+
+def plot_reserve_availability_envelope(
+    reserve_availability: np.ndarray,
+    filename: str,
+    title: str | None = None,
+) -> None:
+    """
+    Plot the reserve availability envelope across load profiles.
+
+    Parameters
+    ----------
+    reserve_availability : np.ndarray
+        Reserve availability profiles with shape ``n_profiles x n_minutes`` [kW].
+
+    filename : str
+        Path where the figure should be saved.
+
+    title : str | None, default None
+        Kept for compatibility, but not used for report-style figures.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    apply_report_style()
+
+    reserve_availability = np.asarray(reserve_availability, dtype=float)
+    minutes = np.arange(reserve_availability.shape[1])
+
+    mean = np.mean(reserve_availability, axis=0)
+    p05 = np.quantile(reserve_availability, 0.05, axis=0)
+    p10 = np.quantile(reserve_availability, 0.10, axis=0)
+    p50 = np.quantile(reserve_availability, 0.50, axis=0)
+    p90 = np.quantile(reserve_availability, 0.90, axis=0)
+    p95 = np.quantile(reserve_availability, 0.95, axis=0)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    ax.fill_between(
+        minutes,
+        p05,
+        p95,
+        alpha=0.20,
+        color=RESERVE_COLOR,
+        label="5th-95th percentile",
+    )
+    ax.fill_between(
+        minutes,
+        p10,
+        p90,
+        alpha=0.30,
+        color=RESERVE_COLOR,
+        label="10th-90th percentile",
+    )
+    ax.plot(
+        minutes,
+        mean,
+        linewidth=2.0,
+        color=RESERVE_COLOR,
+        label="Mean",
+    )
+    ax.plot(
+        minutes,
+        p50,
+        linestyle="--",
+        linewidth=2.0,
+        color=MEAN_LINE_COLOR,
+        label="Median",
+    )
+
+    ax.set_xlabel("Minute")
+    ax.set_ylabel("Available FCR-D UP reserve [kW]")
+    ax.set_xlim(minutes[0], minutes[-1])
+    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.legend(loc="best", fontsize=FONT_SIZE)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ============================================================
+# Task 2.1
+# Reserve bid comparison
+# ============================================================
+
+def plot_task_2_1_bid_comparison(
+    results_df: pd.DataFrame,
+    filename: str,
+) -> None:
+    """
+    Plot reserve bids for the compared methods.
+
+    Parameters
+    ----------
+    results_df : pd.DataFrame
+        Results containing ``method`` and ``reserve_bid_kw`` columns.
+
+    filename : str
+        Path where the figure should be saved.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    apply_report_style()
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    ax.bar(
+        results_df["method"],
+        results_df["reserve_bid_kw"],
+        color=RESERVE_COLOR,
+        alpha=0.75,
+        edgecolor="black",
+        linewidth=0.8,
+    )
+
+    ax.set_xlabel("Method")
+    ax.set_ylabel("Reserve bid [kW]")
+    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+
+    ax.tick_params(axis="x", rotation=0)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ============================================================
+# Task 2.1
+# Shortfall distribution
+# ============================================================
+
+def plot_shortfall_distribution(
+    shortfalls: np.ndarray,
+    filename: str,
+    title: str | None = None,
+) -> None:
+    """
+    Plot the reserve shortfall distribution.
+
+    Parameters
+    ----------
+    shortfalls : np.ndarray
+        Reserve shortfall values [kW].
+
+    filename : str
+        Path where the figure should be saved.
+
+    title : str | None, default None
+        Kept for compatibility, but not used for report-style figures.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    apply_report_style()
+
+    shortfalls = np.asarray(shortfalls, dtype=float).flatten()
+    mean_shortfall = float(np.mean(shortfalls))
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    ax.hist(
+        shortfalls,
+        bins=35,
+        color=SHORTFALL_COLOR,
+        alpha=0.75,
+        edgecolor="black",
+        linewidth=0.8,
+    )
+
+    ax.axvline(
+        mean_shortfall,
+        color=MEAN_LINE_COLOR,
+        linestyle="--",
+        linewidth=1.8,
+        label=f"Mean shortfall: {mean_shortfall:.2f} kW",
+    )
+
+    ax.set_xlabel("Reserve shortfall [kW]")
+    ax.set_ylabel("Frequency")
+    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.legend(loc="best", fontsize=FONT_SIZE)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ============================================================
+# Task 2.2
+# Out-of-sample P90 verification
+# ============================================================
+
+def plot_task_2_2_out_sample_satisfaction(
+    results_df: pd.DataFrame,
+    filename: str,
+) -> None:
+    """
+    Plot out-of-sample satisfaction rates against the P90 requirement.
+
+    Parameters
+    ----------
+    results_df : pd.DataFrame
+        Results containing ``method`` and ``satisfaction_rate`` columns.
+
+    filename : str
+        Path where the figure should be saved.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    apply_report_style()
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    ax.bar(
+        results_df["method"],
+        results_df["satisfaction_rate"],
+        color=RESERVE_COLOR,
+        alpha=0.75,
+        edgecolor="black",
+        linewidth=0.8,
+    )
+
+    ax.axhline(
+        0.90,
+        color=REQUIREMENT_COLOR,
+        linestyle="--",
+        linewidth=1.5,
+        label="P90 requirement",
+    )
+
+    ax.set_xlabel("Method")
+    ax.set_ylabel("Satisfaction rate")
+    ax.set_ylim(0, 1.05)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+    ax.legend(loc="best", fontsize=FONT_SIZE)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ============================================================
+# Task 2.3
+# Combined dual-axis: reliability threshold vs reserve bid and expected shortfall
+# ============================================================
+
+def plot_task_2_3_tradeoff(
+    results_df: pd.DataFrame,
+    filename: str,
+) -> None:
+    """
+    Plot reserve bid and expected shortfall against the reliability threshold.
+
+    Parameters
+    ----------
+    results_df : pd.DataFrame
+        Results containing reliability thresholds, reserve bids and expected
+        shortfalls.
+
+    filename : str
+        Path where the figure should be saved.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    apply_report_style()
+
+    thresholds_pct = results_df["reliability_threshold"].to_numpy(dtype=float) * 100.0
+
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    ax1.set_xlabel("Reliability threshold [%]")
+    ax1.set_ylabel("Reserve bid [kW]")
+
+    line1, = ax1.plot(
+        thresholds_pct,
+        results_df["reserve_bid_kw"],
+        color=RESERVE_COLOR,
+        linestyle="-",
+        marker="o",
+        linewidth=2,
+        alpha=0.75,
+        label="Reserve bid",
+    )
+
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("Expected shortfall [kW]")
+
+    line2, = ax2.plot(
+        thresholds_pct,
+        results_df["in_sample_expected_shortfall_kw"],
+        color=SHORTFALL_COLOR,
+        linestyle="-",
+        marker="s",
+        linewidth=2,
+        alpha=0.40,
+        label="Expected shortfall in-sample",
+    )
+
+    line3, = ax2.plot(
+        thresholds_pct,
+        results_df["out_sample_expected_shortfall_kw"],
+        color=SHORTFALL_COLOR,
+        linestyle="--",
+        marker="s",
+        linewidth=2,
+        alpha=0.75,
+        label="Expected shortfall out-of-sample",
+    )
+
+    ax1.axvline(
+        90.0,
+        color=REQUIREMENT_COLOR,
+        linestyle="--",
+        linewidth=1.5,
+        alpha=0.8,
+        label="P90 requirement",
+    )
+
+    ax1.set_xticks([80, 85, 90, 95, 97.5, 99, 100])
+    ax1.grid(True, linestyle="--", alpha=0.3)
+
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+
+    ax1.legend(
+        lines_1 + lines_2,
+        labels_1 + labels_2,
+        loc="best",
+        fontsize=FONT_SIZE,
+    )
+
+    ax1.tick_params(axis="both", labelsize=FONT_SIZE)
+    ax2.tick_params(axis="both", labelsize=FONT_SIZE)
+    ax1.yaxis.get_offset_text().set_fontsize(FONT_SIZE)
+    ax2.yaxis.get_offset_text().set_fontsize(FONT_SIZE)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ============================================================
+# Task 2.3
+# Reliability threshold vs reserve bid
+# ============================================================
+
+def plot_task_2_3_threshold_vs_bid(
+    results_df: pd.DataFrame,
+    filename: str,
+) -> None:
+    """
+    Plot reserve bid as a function of the reliability threshold.
+
+    Parameters
+    ----------
+    results_df : pd.DataFrame
+        Results containing ``reliability_threshold`` and ``reserve_bid_kw``.
+
+    filename : str
+        Path where the figure should be saved.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    apply_report_style()
+
+    thresholds_pct = results_df["reliability_threshold"].to_numpy(dtype=float) * 100.0
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    ax.plot(
+        thresholds_pct,
+        results_df["reserve_bid_kw"],
+        color=RESERVE_COLOR,
+        marker="o",
+        linewidth=2,
+        alpha=0.75,
+    )
+
+    ax.axvline(
+        90.0,
+        color=REQUIREMENT_COLOR,
+        linestyle="--",
+        linewidth=1.5,
+        alpha=0.8,
+        label="P90 requirement",
+    )
+
+    ax.set_xlabel("Reliability threshold [%]")
+    ax.set_ylabel("Optimal reserve bid [kW]")
+    ax.set_xticks(sorted(thresholds_pct))
+    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.legend(loc="best", fontsize=FONT_SIZE)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ============================================================
+# Task 2.3
+# Reliability threshold vs out-of-sample shortfall
+# ============================================================
+
+def plot_task_2_3_threshold_vs_shortfall(
+    results_df: pd.DataFrame,
+    filename: str,
+) -> None:
+    """
+    Plot out-of-sample expected shortfall as a function of the reliability threshold.
+
+    Parameters
+    ----------
+    results_df : pd.DataFrame
+        Results containing ``reliability_threshold`` and
+        ``out_sample_expected_shortfall_kw``.
+
+    filename : str
+        Path where the figure should be saved.
+
+    Returns
+    -------
+    None
+        The function saves a figure and does not return an object.
+    """
+
+    apply_report_style()
+
+    thresholds_pct = results_df["reliability_threshold"].to_numpy(dtype=float) * 100.0
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    ax.plot(
+        thresholds_pct,
+        results_df["out_sample_expected_shortfall_kw"],
+        color=SHORTFALL_COLOR,
+        marker="s",
+        linewidth=2,
+        alpha=0.75,
+    )
+
+    ax.axvline(
+        90.0,
+        color=REQUIREMENT_COLOR,
+        linestyle="--",
+        linewidth=1.5,
+        alpha=0.8,
+        label="P90 requirement",
+    )
+
+    ax.set_xlabel("Reliability threshold [%]")
+    ax.set_ylabel("Out-of-sample expected shortfall [kW]")
+    ax.set_xticks(sorted(thresholds_pct))
+    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.legend(loc="best", fontsize=FONT_SIZE)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
